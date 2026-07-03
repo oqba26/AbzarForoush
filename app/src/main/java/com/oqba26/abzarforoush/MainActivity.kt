@@ -1,6 +1,7 @@
 package com.oqba26.abzarforoush
 
 import android.os.Bundle
+import android.os.Environment
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -59,6 +60,8 @@ import kotlinx.coroutines.runBlocking
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        
+        cleanupInstaller()
 
         // Initialize Supabase if enabled
         val tempSettings = SettingsManager(this)
@@ -270,6 +273,27 @@ class MainActivity : ComponentActivity() {
                     }
                 }
             }
+        }
+    }
+
+    private fun cleanupInstaller() {
+        try {
+            val downloadDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+            if (downloadDir.exists() && downloadDir.isDirectory) {
+                val files = downloadDir.listFiles()
+                files?.forEach { file ->
+                    if (file.isFile && file.extension.equals("apk", ignoreCase = true)) {
+                        val name = file.name.lowercase()
+                        if (name.contains("abzarforoush") || name.contains("app-debug") || name.contains("app-release")) {
+                            if (file.delete()) {
+                                android.util.Log.d("Cleanup", "Deleted installer: ${file.name}")
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
         }
     }
 }
