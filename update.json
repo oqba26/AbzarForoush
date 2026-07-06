@@ -1,7 +1,8 @@
-{
-  "versionCode": 2,
-  "versionName": "1.0.1",
-  "url": "لینک_مستقیم_فایل_apk_در_بخش_releases",
-  "releaseNotes": "• اضافه شدن سیستم آپدیت خودکار\n• بهبود عملکرد دیتابیس\n• رفع باگ‌های گزارش شده",
-  "isForceUpdate": false
-}
+    {
+      "versionCode": 2,
+      "versionName": "1.2.0",
+      "url": "https://github.com/oqba26/AbzarForoush/releases/download/v1.2.0/abzar_foroush v1.2.0.apk",
+      "releaseNotes": "• افزودن سیستم به‌روزرسانی هوشمند\n• پاکسازی خودکار فایل‌های نصب قدیمی\n• بهبود رابط کاربری دیالوگ‌ها",
+      "isForceUpdate": false
+    }
+    
