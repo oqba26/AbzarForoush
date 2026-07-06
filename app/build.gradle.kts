@@ -1,3 +1,6 @@
+import java.util.Properties
+import java.io.FileInputStream
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -10,18 +13,44 @@ android {
     namespace = "com.oqba26.abzarforoush"
     compileSdk = 35
 
+    val keystorePropertiesFile = rootProject.file("keystore.properties")
+    val keystoreProperties = Properties()
+    if (keystorePropertiesFile.exists()) {
+        keystoreProperties.load(FileInputStream(keystorePropertiesFile))
+    }
+
+    fun getProp(name: String): String? {
+        return (keystoreProperties[name] as? String) ?: System.getenv(name) ?: project.findProperty(name) as? String
+    }
+
     defaultConfig {
         applicationId = "com.oqba26.abzarforoush"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "1.2.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    signingConfigs {
+        create("release") {
+            val storeFileProp = getProp("RELEASE_STORE_FILE")
+            if (storeFileProp != null) {
+                storeFile = file(storeFileProp)
+                storePassword = getProp("RELEASE_STORE_PASSWORD")
+                keyAlias = getProp("RELEASE_KEY_ALIAS")
+                keyPassword = getProp("RELEASE_KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
+            val storeFileProp = getProp("RELEASE_STORE_FILE")
+            if (storeFileProp != null) {
+                signingConfig = signingConfigs.getByName("release")
+            }
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(
