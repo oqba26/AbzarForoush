@@ -22,6 +22,7 @@ class SettingsManager(private val context: Context) {
         val SHOP_PHONE = stringPreferencesKey("shop_phone")
         val SHOP_ADDRESS = stringPreferencesKey("shop_address")
         val SHOP_TAX_ID = stringPreferencesKey("shop_tax_id")
+        val IS_LOGGED_IN = androidx.datastore.preferences.core.booleanPreferencesKey("is_logged_in")
     }
 
     val selectedFont: Flow<String> = context.dataStore.data.map { preferences ->
@@ -42,6 +43,10 @@ class SettingsManager(private val context: Context) {
 
     val isSyncEnabled: Flow<Boolean> = context.dataStore.data.map { preferences ->
         preferences[IS_SYNC_ENABLED] ?: true
+    }
+
+    val isLoggedIn: Flow<Boolean> = context.dataStore.data.map { preferences ->
+        preferences[IS_LOGGED_IN] ?: false
     }
 
     val shopName: Flow<String> = context.dataStore.data.map { preferences ->
@@ -75,6 +80,12 @@ class SettingsManager(private val context: Context) {
     suspend fun setSyncEnabled(enabled: Boolean) {
         context.dataStore.edit { preferences ->
             preferences[IS_SYNC_ENABLED] = enabled
+        }
+    }
+
+    suspend fun setLoggedIn(loggedIn: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[IS_LOGGED_IN] = loggedIn
         }
     }
 

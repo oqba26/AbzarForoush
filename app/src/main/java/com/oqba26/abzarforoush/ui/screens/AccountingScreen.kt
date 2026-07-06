@@ -16,9 +16,12 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
 import com.oqba26.abzarforoush.data.Expense
 import com.oqba26.abzarforoush.data.ExpenseCategory
 import com.oqba26.abzarforoush.data.ProductViewModel
@@ -51,7 +54,7 @@ fun AccountingScreen(
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.primary,
                     titleContentColor = MaterialTheme.colorScheme.onPrimary,
-                    navigationIconContentColor = MaterialTheme.colorScheme.onPrimary
+                    navigationIconContentColor = MaterialTheme.colorScheme.onPrimary,
                 )
             )
         }
@@ -122,12 +125,11 @@ fun AccountingScreen(
 
     if (showAddExpenseDialog) {
         AddExpenseDialog(
-            onDismiss = { showAddExpenseDialog = false },
-            onConfirm = { amount, category, desc ->
-                viewModel.addExpense(amount, category, desc)
-                showAddExpenseDialog = false
-            }
-        )
+            onDismiss = { showAddExpenseDialog = false }
+        ) { amount, category, desc ->
+            viewModel.addExpense(amount, category, desc)
+            showAddExpenseDialog = false
+        }
     }
 }
 
@@ -195,71 +197,93 @@ fun AddExpenseDialog(onDismiss: () -> Unit, onConfirm: (Double, ExpenseCategory,
     var amount by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
     var category by remember { mutableStateOf(ExpenseCategory.OTHER) }
-    var expanded by remember { mutableStateOf(false) }
+    var expanded by remember { mutableStateOf(value = false) }
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("ثبت هزینه جدید") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(
-                    value = amount,
-                    onValueChange = { amount = it.cleanNumber() },
-                    label = { Text("مبلغ (تومان)") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    visualTransformation = PersianNumberVisualTransformation(),
-                    modifier = Modifier.fillMaxWidth()
-                )
-                
-                ExposedDropdownMenuBox(
-                    expanded = expanded,
-                    onExpandedChange = { expanded = !expanded }
-                ) {
-                    OutlinedTextField(
-                        value = getCategoryName(category),
-                        onValueChange = {},
-                        readOnly = true,
-                        label = { Text("دسته بندی") },
-                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-                        modifier = Modifier.menuAnchor(type = MenuAnchorType.PrimaryNotEditable).fillMaxWidth()
+    Dialog(onDismissRequest = onDismiss) {
+        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+            Surface(
+                shape = MaterialTheme.shapes.extraLarge,
+                tonalElevation = 6.dp,
+                modifier = Modifier.fillMaxWidth().padding(16.dp)
+            ) {
+                Column(modifier = Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Text(
+                        text = "ثبت هزینه جدید",
+                        style = MaterialTheme.typography.headlineSmall
                     )
-                    ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                        ExpenseCategory.entries.forEach { cat ->
-                            DropdownMenuItem(
-                                text = { Text(getCategoryName(cat)) },
-                                onClick = {
-                                    category = cat
-                                    expanded = false
-                                }
-                            )
+
+                    OutlinedTextField(
+                        value = amount,
+                        onValueChange = { amount = it.cleanNumber() },
+                        label = { Text("مبلغ (تومان)") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        visualTransformation = PersianNumberVisualTransformation(),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    
+                    ExposedDropdownMenuBox(
+                        expanded = expanded,
+                        onExpandedChange = { expanded = !expanded }
+                    ) {
+                        OutlinedTextField(
+                            value = getCategoryName(category),
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("دسته بندی") },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                            modifier = Modifier.menuAnchor(type = MenuAnchorType.PrimaryNotEditable).fillMaxWidth()
+                        )
+                        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                            ExpenseCategory.entries.forEach { cat ->
+                                DropdownMenuItem(
+                                    text = { Text(getCategoryName(cat)) },
+                                    onClick = {
+                                        category = cat
+                                        expanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+
+                    OutlinedTextField(
+                        value = description,
+                        onValueChange = { description = it },
+                        label = { Text("توضیحات (اختیاری)") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = {
+                                val amt = amount.cleanNumber().toDoubleOrNull() ?: 0.0
+                                if (amt > 0) onConfirm(amt, category, description)
+                            },
+                            modifier = Modifier.weight(1f),
+                            shape = MaterialTheme.shapes.small
+                        ) {
+                            Text("تایید")
+                        }
+                        Button(
+                            onClick = onDismiss,
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.error
+                            ),
+                            shape = MaterialTheme.shapes.small
+                        ) {
+                            Text("انصراف")
                         }
                     }
                 }
-
-                OutlinedTextField(
-                    value = description,
-                    onValueChange = { description = it },
-                    label = { Text("توضیحات (اختیاری)") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = {
-                    val amt = amount.cleanNumber().toDoubleOrNull() ?: 0.0
-                    if (amt > 0) onConfirm(amt, category, description)
-                }
-            ) {
-                Text("تایید")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("انصراف")
             }
         }
-    )
+    }
 }
 
 fun getCategoryName(category: ExpenseCategory): String {

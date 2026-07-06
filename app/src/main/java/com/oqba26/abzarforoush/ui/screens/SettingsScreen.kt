@@ -294,6 +294,7 @@ fun SettingsScreen(
             Button(
                 onClick = {
                     scope.launch {
+                        settingsManager.setLoggedIn(false)
                         SupabaseManager.getClient()?.auth?.signOut()
                         onLogout()
                     }

@@ -222,12 +222,6 @@ class ProductViewModel(private val repository: ProductRepository) : ViewModel() 
         if (supplierId != null) _isPurchaseMode.value = true
     }
 
-    fun setPurchaseMode(enabled: Boolean) {
-        _isPurchaseMode.value = enabled
-        if (enabled) _selectedCustomerIdForCart.value = null
-        else _selectedSupplierIdForCart.value = null
-    }
-
     fun addToCart(product: Product) {
         val customerId = _selectedCustomerIdForCart.value
         viewModelScope.launch {
@@ -451,11 +445,16 @@ class ProductViewModel(private val repository: ProductRepository) : ViewModel() 
                         val price = row["price"]?.replace(",", "")?.toDoubleOrNull() ?: 0.0
                         val stock = row["stock"]?.replace(",", "")?.toDoubleOrNull() ?: 0.0
                         val minStock = row["min_stock"]?.replace(",", "")?.toDoubleOrNull() ?: 0.0
-                        val category = row["category"] ?: "بدون دسته بندی"
+                        val rawCategory = row["category"]
                         val unit = row["unit"] ?: "عدد"
                         val barcode = row["barcode"]
 
                         if (name.isNotBlank()) {
+                            val category = if (rawCategory.isNullOrBlank() || rawCategory == "بدون دسته بندی") {
+                                suggestCategory(name)
+                            } else {
+                                rawCategory
+                            }
                             repository.insert(Product(name = name, price = price, stock = stock, minStock = minStock, category = category, unit = unit, barcode = barcode))
                         }
                     }
@@ -713,6 +712,27 @@ class ProductViewModel(private val repository: ProductRepository) : ViewModel() 
         }
     }
 
+    private fun suggestCategory(name: String): String {
+        val rules = mapOf(
+            "ابزار برقی و شارژی" to listOf("دریل", "فرز", "مینی‌فرز", "بتن‌کن", "هیلتی", "سشوار صنعتی", "اره برقی", "شارژی", "اینورتر", "دستگاه جوش", "کارواش", "پولیش", "رنده برقی", "عمودبر", "گردبر", "تخریب"),
+            "ابزار دستی" to listOf("آچار", "انبر", "سیم‌چین", "دم‌باریک", "پیچ‌گوشتی", "پیچ گوشتی", "متر", "چکش", "سوهان", "اره دستی", "فازمتر", "انبر دست", "کاتر", "تیغ", "قیچی", "تلمبه", "انبر قفلی", "آلن"),
+            "پیچ و اتصالات" to listOf("پیچ", "مهره", "واشر", "رولپلاک", "میخ", "بکس", "گل‌میخ", "خار", "سرمته"),
+            "یراق‌آلات" to listOf("قفل", "لولا", "دستگیره", "سیلندر", "مغزی", "آرام‌بند", "چشمی", "کشاب", "ریل"),
+            "لوازم ایمنی" to listOf("دستکش", "ماسک", "عینک", "کلاه ایمنی", "کفش کار", "لباس کار", "گوشی ایمنی", "کمربند ایمنی"),
+            "ابزار اندازه‌گیری" to listOf("کولیس", "تراز", "گونیا", "میکرومتر", "خط‌کش"),
+            "رنگ و چسب" to listOf("چسب", "رنگ", "اسپری", "قلم‌مو", "غلطک", "تینر", "ضدزنگ", "بتونه"),
+            "لوازم ساختمانی" to listOf("بیل", "کلنگ", "فرغون", "شاقول", "استانبولی", "کمچه", "ماله", "الک"),
+            "لوازم شیرآلات" to listOf("شیر", "شلنگ", "نوار تفلون", "پیسوار", "علمی", "کارتریج")
+        )
+
+        for ((category, keywords) in rules) {
+            if (keywords.any { name.contains(it, ignoreCase = true) }) {
+                return category
+            }
+        }
+        return "بدون دسته بندی"
+    }
+
     fun exportToExcel(context: android.content.Context) {
         viewModelScope.launch {
             try {
@@ -758,7 +778,12 @@ class ProductViewModel(private val repository: ProductRepository) : ViewModel() 
                     val products: List<Product> = Sheetz.read(tempFile.absolutePath, Product::class.java)
                     products.forEach { product ->
                         if (product.name.isNotBlank()) {
-                            repository.insert(product.copy(id = 0))
+                            val finalCategory = if (product.category == "بدون دسته بندی") {
+                                suggestCategory(product.name)
+                            } else {
+                                product.category
+                            }
+                            repository.insert(product.copy(id = 0, category = finalCategory))
                         }
                     }
                     tempFile.delete() // Clean up
