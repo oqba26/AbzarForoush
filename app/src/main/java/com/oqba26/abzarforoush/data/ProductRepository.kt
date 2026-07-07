@@ -21,6 +21,10 @@ class ProductRepository(
     val allSuppliers: Flow<List<Supplier>> = supplierDao.getAllSuppliers()
     val allCheques: Flow<List<Cheque>> = chequeDao.getAllCheques()
 
+    suspend fun getAllSuppliersList(): List<Supplier> = supplierDao.getAllSuppliersList()
+    suspend fun getAllChequesList(): List<Cheque> = chequeDao.getAllChequesList()
+    suspend fun getAllExpensesList(): List<Expense> = expenseDao.getAllExpensesList()
+
     fun getDebtTransactions(customerId: Int): Flow<List<DebtTransaction>> {
         return debtTransactionDao.getTransactionsForCustomer(customerId)
     }
@@ -208,8 +212,8 @@ class ProductRepository(
 
     suspend fun getFullBackup(): AppBackup {
         return AppBackup(
-            products = productDao.getAllProductsList(), // Need to add this to ProductDao
-            customers = customerDao.getAllCustomersList(), // Need to add this to CustomerDao
+            products = productDao.getAllProductsList(),
+            customers = customerDao.getAllCustomersList(),
             invoices = invoiceDao.getAllInvoicesRaw(),
             invoiceItems = invoiceDao.getAllInvoiceItemsRaw()
         )

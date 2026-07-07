@@ -8,6 +8,9 @@ interface SupplierDao {
     @Query("SELECT * FROM suppliers ORDER BY name ASC")
     fun getAllSuppliers(): Flow<List<Supplier>>
 
+    @Query("SELECT * FROM suppliers")
+    suspend fun getAllSuppliersList(): List<Supplier>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertSupplier(supplier: Supplier)
 

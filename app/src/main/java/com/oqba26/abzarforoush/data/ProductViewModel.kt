@@ -1,8 +1,11 @@
 package com.oqba26.abzarforoush.data
 
+import android.content.Context
+import android.net.Uri
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -14,6 +17,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import io.github.chitralabs.sheetz.Sheetz
@@ -93,8 +97,11 @@ class ProductViewModel(private val repository: ProductRepository) : ViewModel() 
     }
 
     val categories: StateFlow<List<String>> = repository.allProducts
-        .map { products: List<Product> -> 
-            (listOf("همه", "پکیج‌ها") + products.asSequence().map { it.category }.distinct().filter { it != "بدون دسته بندی" }.toList() + "بدون دسته بندی").distinct()
+        .map { products ->
+            val distinctCategories = products.map { it.category }
+                .distinct()
+                .filter { it != "بدون دسته بندی" }
+            (listOf("همه", "پکیج‌ها") + distinctCategories + "بدون دسته بندی").distinct()
         }
         .stateIn(
             scope = viewModelScope,
@@ -186,24 +193,40 @@ class ProductViewModel(private val repository: ProductRepository) : ViewModel() 
     fun deleteSupplier(supplier: Supplier) {
         viewModelScope.launch {
             repository.deleteSupplier(supplier)
+            launch {
+                try {
+                    SupabaseManager.getClient()?.postgrest?.from("suppliers")?.delete {
+                        filter { Supplier::id eq supplier.id }
+                    }
+                } catch (_: Exception) {}
+            }
         }
     }
 
     fun addCheque(chequeNumber: String, bankName: String, amount: Double, dueDate: Long, personName: String, type: ChequeType) {
         viewModelScope.launch {
             repository.insertCheque(Cheque(chequeNumber = chequeNumber, bankName = bankName, amount = amount, dueDate = dueDate, personName = personName, type = type))
+            launch { silentSync() }
         }
     }
 
     fun updateCheque(cheque: Cheque) {
         viewModelScope.launch {
             repository.updateCheque(cheque)
+            launch { silentSync() }
         }
     }
 
     fun deleteCheque(cheque: Cheque) {
         viewModelScope.launch {
             repository.deleteCheque(cheque)
+            launch {
+                try {
+                    SupabaseManager.getClient()?.postgrest?.from("cheques")?.delete {
+                        filter { Cheque::id eq cheque.id }
+                    }
+                } catch (_: Exception) {}
+            }
         }
     }
 
@@ -271,7 +294,7 @@ class ProductViewModel(private val repository: ProductRepository) : ViewModel() 
                         repository.getLastPriceForCustomer(it, product.name)
                     }
                     val basePrice = historicalPrice ?: product.price
-
+                    
                     val existingItem = currentList.find { it.product.id == product.id }
                     if (existingItem != null) {
                         val index = currentList.indexOf(existingItem)
@@ -360,6 +383,13 @@ class ProductViewModel(private val repository: ProductRepository) : ViewModel() 
         }
     }
 
+    @Suppress("unused")
+    fun addBundle(name: String, description: String?, items: List<BundleItem>) {
+        viewModelScope.launch {
+            repository.insertBundle(Bundle(name = name, description = description), items)
+        }
+    }
+
     fun deleteBundle(bundle: Bundle) {
         viewModelScope.launch {
             repository.deleteBundle(bundle)
@@ -376,15 +406,12 @@ class ProductViewModel(private val repository: ProductRepository) : ViewModel() 
     fun deleteProduct(product: Product) {
         viewModelScope.launch {
             repository.delete(product)
-            // Background attempt to delete from Supabase
             launch {
                 try {
                     SupabaseManager.getClient()?.postgrest?.from("products")?.delete {
                         filter { Product::id eq product.id }
                     }
-                } catch (_: Exception) {
-                    Log.d("Sync", "Silent delete failed, skipping")
-                }
+                } catch (_: Exception) {}
             }
         }
     }
@@ -426,7 +453,6 @@ class ProductViewModel(private val repository: ProductRepository) : ViewModel() 
     private suspend fun silentSync() {
         val client = SupabaseManager.getClient() ?: return
         try {
-            // Push all data to Supabase (upsert handles updates)
             val products = repository.allProducts.first()
             client.postgrest["products"].upsert(products)
             
@@ -442,10 +468,16 @@ class ProductViewModel(private val repository: ProductRepository) : ViewModel() 
             val transactions = repository.getAllTransactionsList()
             client.postgrest["debt_transactions"].upsert(transactions)
 
-            val expenses = repository.allExpenses.first()
+            val expenses = repository.getAllExpensesList()
             client.postgrest["expenses"].upsert(expenses)
-        } catch (_: Exception) {
-            Log.d("Sync", "Silent sync skipped: No internet")
+
+            val suppliers = repository.getAllSuppliersList()
+            client.postgrest["suppliers"].upsert(suppliers)
+
+            val cheques = repository.getAllChequesList()
+            client.postgrest["cheques"].upsert(cheques)
+        } catch (e: Exception) {
+            Log.d("Sync", "Silent sync failed: ${e.message}")
         }
     }
 
@@ -458,41 +490,46 @@ class ProductViewModel(private val repository: ProductRepository) : ViewModel() 
         return repository.getProductByBarcode(barcode)
     }
 
-    fun importFromCsv(csvUri: android.net.Uri, context: android.content.Context) {
+    fun importFromCsv(csvUri: Uri, context: Context) {
         viewModelScope.launch {
             try {
-                context.contentResolver.openInputStream(csvUri)?.use { inputStream ->
-                    val rows = com.github.doyaaaaaken.kotlincsv.dsl.csvReader().readAllWithHeader(inputStream)
-                    rows.forEach { row ->
-                        val name = row["name"] ?: ""
-                        val price = row["price"]?.replace(",", "")?.toDoubleOrNull() ?: 0.0
-                        val stock = row["stock"]?.replace(",", "")?.toDoubleOrNull() ?: 0.0
-                        val minStock = row["min_stock"]?.replace(",", "")?.toDoubleOrNull() ?: 0.0
-                        val rawCategory = row["category"]
-                        val unit = row["unit"] ?: "عدد"
-                        val barcode = row["barcode"]
+                withContext(Dispatchers.IO) {
+                    context.contentResolver.openInputStream(csvUri)?.use { inputStream ->
+                        val rows = com.github.doyaaaaaken.kotlincsv.dsl.csvReader().readAllWithHeader(inputStream)
+                        rows.forEach { row ->
+                            val name = row["name"] ?: ""
+                            val price = row["price"]?.replace(",", "")?.toDoubleOrNull() ?: 0.0
+                            val stock = row["stock"]?.replace(",", "")?.toDoubleOrNull() ?: 0.0
+                            val minStock = row["min_stock"]?.replace(",", "")?.toDoubleOrNull() ?: 0.0
+                            val rawCategory = row["category"]
+                            val unit = row["unit"] ?: "عدد"
+                            val barcode = row["barcode"]
 
-                        if (name.isNotBlank()) {
-                            val category = if (rawCategory.isNullOrBlank() || rawCategory == "بدون دسته بندی") {
-                                suggestCategory(name)
-                            } else {
-                                rawCategory
+                            if (name.isNotBlank()) {
+                                val category = if (rawCategory.isNullOrBlank() || rawCategory == "بدون دسته بندی") {
+                                    suggestCategory(name)
+                                } else {
+                                    rawCategory
+                                }
+                                launch {
+                                    repository.insert(Product(name = name, price = price, stock = stock, minStock = minStock, category = category, unit = unit, barcode = barcode))
+                                }
                             }
-                            repository.insert(Product(name = name, price = price, stock = stock, minStock = minStock, category = category, unit = unit, barcode = barcode))
                         }
                     }
                 }
+                launch { silentSync() }
             } catch (e: Exception) {
                 Log.e("ImportCSV", "Failed to import", e)
             }
         }
     }
 
-    fun exportFullBackup(context: android.content.Context) {
+    fun exportFullBackup(context: Context) {
         viewModelScope.launch {
             try {
                 val backup = repository.getFullBackup()
-                val jsonString = Json.encodeToString(backup)
+                val jsonString = withContext(Dispatchers.Default) { Json.encodeToString(backup) }
                 
                 val sendIntent = android.content.Intent().apply {
                     action = android.content.Intent.ACTION_SEND
@@ -508,13 +545,18 @@ class ProductViewModel(private val repository: ProductRepository) : ViewModel() 
         }
     }
 
-    fun importFullBackup(jsonUri: android.net.Uri, context: android.content.Context) {
+    fun importFullBackup(jsonUri: Uri, context: Context) {
         viewModelScope.launch {
             try {
-                context.contentResolver.openInputStream(jsonUri)?.use { inputStream ->
-                    val jsonString = inputStream.bufferedReader().use { it.readText() }
-                    val backup = Json.decodeFromString<AppBackup>(jsonString)
+                val backup = withContext(Dispatchers.IO) {
+                    context.contentResolver.openInputStream(jsonUri)?.use { inputStream ->
+                        val jsonString = inputStream.bufferedReader().use { it.readText() }
+                        Json.decodeFromString<AppBackup>(jsonString)
+                    }
+                }
+                if (backup != null) {
                     repository.restoreBackup(backup)
+                    launch { silentSync() }
                 }
             } catch (e: Exception) {
                 Log.e("ImportBackup", "Failed to import", e)
@@ -522,7 +564,7 @@ class ProductViewModel(private val repository: ProductRepository) : ViewModel() 
         }
     }
 
-    fun shareInvoiceAsPdf(context: android.content.Context, invoiceWithItems: InvoiceWithItems) {
+    fun shareInvoiceAsPdf(context: Context, invoiceWithItems: InvoiceWithItems) {
         viewModelScope.launch {
             val settings = SettingsManager(context)
             val name = settings.shopName.first()
@@ -530,14 +572,16 @@ class ProductViewModel(private val repository: ProductRepository) : ViewModel() 
             val address = settings.shopAddress.first()
             val taxId = settings.shopTaxId.first()
             
-            InvoicePdfHelper.generateAndShareInvoice(
-                context, 
-                invoiceWithItems,
-                shopName = name,
-                shopPhone = phone,
-                shopAddress = address,
-                shopTaxId = taxId
-            )
+            withContext(Dispatchers.IO) {
+                InvoicePdfHelper.generateAndShareInvoice(
+                    context, 
+                    invoiceWithItems,
+                    shopName = name,
+                    shopPhone = phone,
+                    shopAddress = address,
+                    shopTaxId = taxId
+                )
+            }
         }
     }
 
@@ -551,7 +595,7 @@ class ProductViewModel(private val repository: ProductRepository) : ViewModel() 
 
         val now = System.currentTimeMillis()
         
-        // 1. Seasonal Insight (Summer logic for Tir/July)
+        // 1. Seasonal Insight
         val summerKeywords = listOf("کولر", "پمپ", "آب", "شیلنگ", "اتصالات", "فن", "پنکه", "قیر", "ایزوگام")
         val summerSales = items.filter { item -> 
             summerKeywords.any { it in item.productName } 
@@ -561,7 +605,7 @@ class ProductViewModel(private val repository: ProductRepository) : ViewModel() 
             insights.add("☀️ با توجه به فصل گرما، فروش ملزومات آبی و سرمایشی ${summerSales.toInt().toPersianNumber()} مورد بوده؛ پیشنهاد می‌شود موجودی این اقلام را شارژ نگه دارید.")
         }
 
-        // 2. Growth Analysis (This week vs Last week)
+        // 2. Growth Analysis
         val oneWeekAgo = now - (7L * 24 * 60 * 60 * 1000)
         val twoWeeksAgo = now - (14L * 24 * 60 * 60 * 1000)
         
@@ -573,7 +617,7 @@ class ProductViewModel(private val repository: ProductRepository) : ViewModel() 
             insights.add("📈 روند فروش شما نسبت به هفته قبل ${growth.toPersianNumber()}% رشد داشته است. عالیه!")
         }
 
-        // 3. Future Income Estimation (Quantified)
+        // 3. Future Income Estimation
         val thirtyDaysAgo = now - (30L * 24 * 60 * 60 * 1000)
         val lastMonthSales = invoices.filter { it.invoice.timestamp > thirtyDaysAgo }.sumOf { it.invoice.totalAmount }
         if (lastMonthSales > 0) {
@@ -587,37 +631,6 @@ class ProductViewModel(private val repository: ProductRepository) : ViewModel() 
             .maxByOrNull { it.value.sumOf { i -> i.quantity } }?.key
         topProduct?.let {
             insights.add("🏆 کالای «$it» پرچم‌دار فروش شماست؛ شاید بد نباشد روی خرید عمده‌تر آن با قیمت کمتر مذاکره کنید.")
-        }
-
-        // 4. Low Stock Warning in Insights
-        val lowStockCount = repository.allProducts.first().count { it.minStock > 0 && it.stock <= it.minStock }
-        if (lowStockCount > 0) {
-            insights.add("⚠️ تعداد ${lowStockCount.toPersianNumber()} کالا در وضعیت کمبود موجودی هستند. لیست خرید را چک کنید.")
-        }
-
-        // 5. Overdue Debts
-        val overdueCount = invoices.count { 
-            val dueDate = it.invoice.dueDate
-            dueDate != null && dueDate < now && (it.invoice.totalAmount > it.invoice.amountPaid)
-        }
-        if (overdueCount > 0) {
-            insights.add("🔔 تعداد ${overdueCount.toPersianNumber()} فاکتور نسیه از تاریخ سررسید گذشته‌اند! لطفا بخش تسویه حساب را بررسی کنید.")
-        }
-
-        // 6. Stock-out Prediction
-        val products = repository.allProducts.first()
-        val thirtyDaysAgoForStock = now - (30L * 24 * 60 * 60 * 1000)
-        products.filter { it.stock > 0 }.forEach { product ->
-            val salesInLastMonth = items.filter { 
-                it.productName == product.name && (invoices.find { inv -> inv.invoice.id == it.invoiceId }?.invoice?.timestamp ?: 0) > thirtyDaysAgoForStock 
-            }.sumOf { it.quantity }
-            if (salesInLastMonth > 0) {
-                val dailyRate = salesInLastMonth / 30
-                val daysLeft = (product.stock / dailyRate).toInt()
-                if (daysLeft in 1..7) {
-                    insights.add("📉 کالای «${product.name}» با سرعت فعلی فروش، تا ${daysLeft.toPersianNumber()} روز دیگر تمام می‌شود.")
-                }
-            }
         }
 
         insights
@@ -636,7 +649,6 @@ class ProductViewModel(private val repository: ProductRepository) : ViewModel() 
         
         val cartProductNames = currentCart.map { it.product.name }.toSet()
         
-        // Find products often bought with products in cart
         val associatedProductNames = invoices.flatMap { invoiceWithItems ->
             val hasCartProduct = invoiceWithItems.items.any { it.productName in cartProductNames }
             if (hasCartProduct) {
@@ -663,7 +675,6 @@ class ProductViewModel(private val repository: ProductRepository) : ViewModel() 
             val client = SupabaseManager.getClient() ?: return@launch
             val channel = client.channel("db-changes")
             
-            // 1. Products
             launch {
                 channel.postgresChangeFlow<PostgresAction.Insert>(schema = "public") { table = "products" }.collect { 
                     repository.insert(it.decodeRecord<Product>()) 
@@ -685,7 +696,6 @@ class ProductViewModel(private val repository: ProductRepository) : ViewModel() 
                 }
             }
 
-            // 2. Customers
             launch {
                 channel.postgresChangeFlow<PostgresAction.Insert>(schema = "public") { table = "customers" }.collect { 
                     repository.insertCustomer(it.decodeRecord<Customer>()) 
@@ -707,7 +717,6 @@ class ProductViewModel(private val repository: ProductRepository) : ViewModel() 
                 }
             }
 
-            // 3. Invoices, Items, Transactions & Expenses
             launch {
                 channel.postgresChangeFlow<PostgresAction.Insert>(schema = "public") { table = "invoices" }.collect { 
                     repository.insertInvoiceRaw(it.decodeRecord<Invoice>())
@@ -728,6 +737,16 @@ class ProductViewModel(private val repository: ProductRepository) : ViewModel() 
                     repository.insertExpense(it.decodeRecord<Expense>())
                 }
             }
+            launch {
+                channel.postgresChangeFlow<PostgresAction.Insert>(schema = "public") { table = "suppliers" }.collect { 
+                    repository.insertSupplier(it.decodeRecord<Supplier>())
+                }
+            }
+            launch {
+                channel.postgresChangeFlow<PostgresAction.Insert>(schema = "public") { table = "cheques" }.collect { 
+                    repository.insertCheque(it.decodeRecord<Cheque>())
+                }
+            }
 
             channel.subscribe()
         }
@@ -741,43 +760,45 @@ class ProductViewModel(private val repository: ProductRepository) : ViewModel() 
         viewModelScope.launch {
             val client = SupabaseManager.getClient() ?: return@launch
             try {
-                // 1. Pull EVERYTHING from Supabase to local DB
                 val remoteProducts = client.postgrest["products"].select().decodeList<Product>()
-                remoteProducts.forEach { repository.insert(it) }
+                remoteProducts.forEach { product ->
+                    launch { repository.insert(product) }
+                }
 
                 val remoteCustomers = client.postgrest["customers"].select().decodeList<Customer>()
-                remoteCustomers.forEach { repository.insertCustomer(it) }
+                remoteCustomers.forEach { customer ->
+                    launch { repository.insertCustomer(customer) }
+                }
                 
                 val remoteInvoices = client.postgrest["invoices"].select().decodeList<Invoice>()
-                remoteInvoices.forEach { repository.insertInvoiceRaw(it) }
+                remoteInvoices.forEach { invoice ->
+                    launch { repository.insertInvoiceRaw(invoice) }
+                }
                 
                 val remoteItems = client.postgrest["invoice_items"].select().decodeList<InvoiceItem>()
                 repository.insertInvoiceItemsRaw(remoteItems)
                 
                 val remoteTransactions = client.postgrest["debt_transactions"].select().decodeList<DebtTransaction>()
-                remoteTransactions.forEach { repository.insertTransactionRaw(it) }
+                remoteTransactions.forEach { transaction ->
+                    launch { repository.insertTransactionRaw(transaction) }
+                }
                 
                 val remoteExpenses = client.postgrest["expenses"].select().decodeList<Expense>()
-                remoteExpenses.forEach { repository.insertExpense(it) }
+                remoteExpenses.forEach { expense ->
+                    launch { repository.insertExpense(expense) }
+                }
 
-                // 2. Push local data to Supabase (upsert)
-                val products = repository.allProducts.first()
-                client.postgrest["products"].upsert(products)
+                val remoteSuppliers = client.postgrest["suppliers"].select().decodeList<Supplier>()
+                remoteSuppliers.forEach { supplier ->
+                    launch { repository.insertSupplier(supplier) }
+                }
 
-                val customers = repository.allCustomers.first()
-                client.postgrest["customers"].upsert(customers)
+                val remoteCheques = client.postgrest["cheques"].select().decodeList<Cheque>()
+                remoteCheques.forEach { cheque ->
+                    launch { repository.insertCheque(cheque) }
+                }
 
-                val invoices = repository.allInvoices.first().map { it.invoice }
-                client.postgrest["invoices"].upsert(invoices)
-
-                val invoiceItems = repository.allInvoiceItems.first()
-                client.postgrest["invoice_items"].upsert(invoiceItems)
-
-                val transactions = repository.getAllTransactionsList()
-                client.postgrest["debt_transactions"].upsert(transactions)
-                
-                val expenses = repository.allExpenses.first()
-                client.postgrest["expenses"].upsert(expenses)
+                launch { silentSync() }
                 
                 Log.d("Sync", "Full bidirectional sync completed")
             } catch (e: Exception) {
@@ -791,6 +812,14 @@ class ProductViewModel(private val repository: ProductRepository) : ViewModel() 
     fun deleteInvoice(invoiceWithItems: InvoiceWithItems) {
         viewModelScope.launch {
             repository.deleteInvoice(invoiceWithItems)
+            launch {
+                try {
+                    val client = SupabaseManager.getClient() ?: return@launch
+                    client.postgrest["invoices"].delete { filter { Invoice::id eq invoiceWithItems.invoice.id } }
+                    client.postgrest["invoice_items"].delete { filter { InvoiceItem::invoiceId eq invoiceWithItems.invoice.id } }
+                    client.postgrest["debt_transactions"].delete { filter { DebtTransaction::invoiceId eq invoiceWithItems.invoice.id } }
+                } catch (_: Exception) {}
+            }
         }
     }
 
@@ -815,61 +844,67 @@ class ProductViewModel(private val repository: ProductRepository) : ViewModel() 
         return "بدون دسته بندی"
     }
 
-    fun exportToExcel(context: android.content.Context) {
+    fun exportToExcel(context: Context) {
         viewModelScope.launch {
             try {
                 val products = repository.allProducts.first()
-                val tempFile = java.io.File(context.cacheDir, "Inventory_Backup.xlsx")
-                
-                // Sheetz.write makes it incredibly easy in 2026!
-                Sheetz.write(products, tempFile.absolutePath)
-                
-                val uri = androidx.core.content.FileProvider.getUriForFile(
-                    context, 
-                    "${context.packageName}.fileprovider", 
-                    tempFile
-                )
-                
-                val sendIntent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
-                    type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                    putExtra(android.content.Intent.EXTRA_STREAM, uri)
-                    addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                withContext(Dispatchers.IO) {
+                    val tempFile = java.io.File(context.cacheDir, "Inventory_Backup.xlsx")
+                    Sheetz.write(products, tempFile.absolutePath)
+                    
+                    val uri = androidx.core.content.FileProvider.getUriForFile(
+                        context, 
+                        "${context.packageName}.fileprovider", 
+                        tempFile
+                    )
+                    
+                    val sendIntent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                        type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                        putExtra(android.content.Intent.EXTRA_STREAM, uri)
+                        addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    }
+                    
+                    val shareIntent = android.content.Intent.createChooser(sendIntent, "خروجی اکسل انبار")
+                    shareIntent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                    context.startActivity(shareIntent)
                 }
-                
-                val shareIntent = android.content.Intent.createChooser(sendIntent, "خروجی اکسل انبار")
-                shareIntent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-                context.startActivity(shareIntent)
             } catch (e: Exception) {
                 Log.e("ExportExcel", "Failed to export", e)
             }
         }
     }
 
-    fun importFromExcel(uri: android.net.Uri, context: android.content.Context) {
+    fun importFromExcel(uri: Uri, context: Context) {
         viewModelScope.launch {
             try {
-                // Copy the stream to a temp file because Sheetz.read expects a file path or Path object
-                val tempFile = java.io.File(context.cacheDir, "temp_import.xlsx")
-                context.contentResolver.openInputStream(uri)?.use { inputStream ->
-                    tempFile.outputStream().use { outputStream ->
-                        inputStream.copyTo(outputStream)
+                val products = withContext(Dispatchers.IO) {
+                    val tempFile = java.io.File(context.cacheDir, "temp_import.xlsx")
+                    context.contentResolver.openInputStream(uri)?.use { inputStream ->
+                        tempFile.outputStream().use { outputStream ->
+                            inputStream.copyTo(outputStream)
+                        }
                     }
+                    
+                    if (tempFile.exists()) {
+                        val list: List<Product> = Sheetz.read(tempFile.absolutePath, Product::class.java)
+                        tempFile.delete()
+                        list
+                    } else null
                 }
-                
-                if (tempFile.exists()) {
-                    val products: List<Product> = Sheetz.read(tempFile.absolutePath, Product::class.java)
-                    products.forEach { product ->
-                        if (product.name.isNotBlank()) {
-                            val finalCategory = if (product.category == "بدون دسته بندی") {
-                                suggestCategory(product.name)
-                            } else {
-                                product.category
-                            }
+
+                products?.forEach { product ->
+                    if (product.name.isNotBlank()) {
+                        val finalCategory = if (product.category == "بدون دسته بندی") {
+                            suggestCategory(product.name)
+                        } else {
+                            product.category
+                        }
+                        launch {
                             repository.insert(product.copy(id = 0, category = finalCategory))
                         }
                     }
-                    tempFile.delete() // Clean up
                 }
+                launch { silentSync() }
             } catch (e: Exception) {
                 Log.e("ImportExcel", "Failed to import", e)
             }
