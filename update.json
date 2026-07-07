@@ -1,8 +1,7 @@
-    {
-      "versionCode": 2,
-      "versionName": "1.2.0",
-      "url": "https://github.com/oqba26/AbzarForoush/releases/download/v1.2.0/abzar_foroush v1.2.0.apk",
-      "releaseNotes": "• افزودن سیستم به‌روزرسانی هوشمند\n• پاکسازی خودکار فایل‌های نصب قدیمی\n• بهبود رابط کاربری دیالوگ‌ها",
-      "isForceUpdate": false
-    }
-    
+{
+  "versionCode": 6,
+  "versionName": "1.2.5",
+  "url": "https://github.com/oqba26/AbzarForoush/releases/download/v1.2.5/AbzarForoush-v1.2.5.apk",
+  "releaseNotes": "• رفع مشکل همگام‌سازی لحظه‌ای (Real-time)\n• بهبود مدیریت بدهی و سوابق مشتریان\n• نمایش گردش کالا و سابقه قیمت در کارت محصول\n• بهینه‌سازی رابط کاربری سبد خرید",
+  "isForceUpdate": true
+}
