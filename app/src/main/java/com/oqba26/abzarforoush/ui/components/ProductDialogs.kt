@@ -12,6 +12,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material3.Button
@@ -32,6 +35,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -75,6 +79,7 @@ fun AddProductDialog(
     // ... rest of logic
 
     val context = LocalContext.current
+    val scrollState = rememberScrollState()
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { isGranted ->
@@ -93,12 +98,19 @@ fun AddProductDialog(
 
     Dialog(onDismissRequest = onDismiss) {
         CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
-            Surface(
+                Surface(
                 shape = MaterialTheme.shapes.extraLarge,
                 tonalElevation = 6.dp,
-                modifier = Modifier.fillMaxWidth().padding(16.dp)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp)
+                    .heightIn(max = 650.dp)
             ) {
-                Column(modifier = Modifier.padding(24.dp)) {
+                Column(
+                    modifier = Modifier
+                        .padding(24.dp)
+                        .verticalScroll(scrollState)
+                ) {
                     Text(
                         text = "افزودن محصول جدید",
                         style = MaterialTheme.typography.headlineSmall,
@@ -119,7 +131,8 @@ fun AddProductDialog(
                             },
                             label = { Text("نام کالا") },
                             modifier = Modifier.fillMaxWidth(),
-                            textStyle = TextStyle(fontFamily = currentFontFamily)
+                            textStyle = TextStyle(fontFamily = currentFontFamily),
+                            singleLine = true
                         )
                         OutlinedTextField(
                             value = price,
@@ -133,9 +146,14 @@ fun AddProductDialog(
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                             visualTransformation = PersianNumberVisualTransformation(),
                             modifier = Modifier.fillMaxWidth(),
-                            textStyle = TextStyle(fontFamily = currentFontFamily)
+                            textStyle = TextStyle(fontFamily = currentFontFamily),
+                            singleLine = true
                         )
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
                             OutlinedTextField(
                                 value = wholesalePrice,
                                 onValueChange = { input -> 
@@ -146,7 +164,8 @@ fun AddProductDialog(
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                                 visualTransformation = PersianNumberVisualTransformation(),
                                 modifier = Modifier.weight(1f),
-                                textStyle = TextStyle(fontFamily = currentFontFamily)
+                                textStyle = TextStyle(fontFamily = currentFontFamily),
+                                singleLine = true
                             )
                             OutlinedTextField(
                                 value = partnerPrice,
@@ -158,7 +177,8 @@ fun AddProductDialog(
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                                 visualTransformation = PersianNumberVisualTransformation(),
                                 modifier = Modifier.weight(1f),
-                                textStyle = TextStyle(fontFamily = currentFontFamily)
+                                textStyle = TextStyle(fontFamily = currentFontFamily),
+                                singleLine = true
                             )
                         }
                         OutlinedTextField(
@@ -173,9 +193,14 @@ fun AddProductDialog(
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                             visualTransformation = PersianNumberVisualTransformation(),
                             modifier = Modifier.fillMaxWidth(),
-                            textStyle = TextStyle(fontFamily = currentFontFamily)
+                            textStyle = TextStyle(fontFamily = currentFontFamily),
+                            singleLine = true
                         )
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
                             OutlinedTextField(
                                 value = stock,
                                 onValueChange = { input ->
@@ -221,7 +246,8 @@ fun AddProductDialog(
                                 label = { Text("انتخاب یا تایپ دسته بندی") },
                                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = categoryExpanded) },
                                 modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryEditable).fillMaxWidth(),
-                                textStyle = TextStyle(fontFamily = currentFontFamily)
+                                textStyle = TextStyle(fontFamily = currentFontFamily),
+                                singleLine = true
                             )
                             val filteredCategories = categories.filter { 
                                 it.contains(category, ignoreCase = true) && it != "همه" && it != "بدون دسته بندی" 
@@ -244,34 +270,33 @@ fun AddProductDialog(
                                 }
                             }
                         }
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            ExposedDropdownMenuBox(
-                                expanded = expanded,
-                                onExpandedChange = { expanded = !expanded },
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                OutlinedTextField(
-                                    value = unit,
-                                    onValueChange = {
-                                        unit = it
-                                        isUnitManuallyEdited = true
-                                    },
-                                    label = { Text("واحد") },
-                                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-                                    modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryEditable).fillMaxWidth(),
-                                    textStyle = TextStyle(fontFamily = currentFontFamily)
-                                )
-                                ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                                    units.filter { it.contains(unit, ignoreCase = true) }.forEach { u ->
-                                        DropdownMenuItem(
-                                            text = { Text(u) },
-                                            onClick = { 
-                                                unit = u
-                                                isUnitManuallyEdited = true
-                                                expanded = false 
-                                            }
-                                        )
-                                    }
+                        ExposedDropdownMenuBox(
+                            expanded = expanded,
+                            onExpandedChange = { expanded = !expanded },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            OutlinedTextField(
+                                value = unit,
+                                onValueChange = {
+                                    unit = it
+                                    isUnitManuallyEdited = true
+                                },
+                                label = { Text("واحد") },
+                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                                modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryEditable).fillMaxWidth(),
+                                textStyle = TextStyle(fontFamily = currentFontFamily),
+                                singleLine = true
+                            )
+                            ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                                units.filter { it.contains(unit, ignoreCase = true) }.forEach { u ->
+                                    DropdownMenuItem(
+                                        text = { Text(u) },
+                                        onClick = { 
+                                            unit = u
+                                            isUnitManuallyEdited = true
+                                            expanded = false 
+                                        }
+                                    )
                                 }
                             }
                         }
@@ -291,7 +316,8 @@ fun AddProductDialog(
                                 }
                             },
                             modifier = Modifier.fillMaxWidth(),
-                            textStyle = TextStyle(fontFamily = currentFontFamily)
+                            textStyle = TextStyle(fontFamily = currentFontFamily),
+                            singleLine = true
                         )
                     }
 
@@ -299,7 +325,7 @@ fun AddProductDialog(
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         Button(
                             onClick = {
@@ -319,12 +345,9 @@ fun AddProductDialog(
                                 }
                             },
                             modifier = Modifier.weight(1f),
-                            shape = MaterialTheme.shapes.small,
-                            colors = androidx.compose.material3.ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme.colorScheme.primary
-                            )
+                            shape = MaterialTheme.shapes.medium
                         ) {
-                            Text("تایید", color = MaterialTheme.colorScheme.onPrimary)
+                            Text("تایید", style = MaterialTheme.typography.titleMedium)
                         }
                         Button(
                             onClick = onDismiss,
@@ -332,9 +355,9 @@ fun AddProductDialog(
                             colors = androidx.compose.material3.ButtonDefaults.buttonColors(
                                 containerColor = MaterialTheme.colorScheme.error
                             ),
-                            shape = MaterialTheme.shapes.small
+                            shape = MaterialTheme.shapes.medium
                         ) {
-                            Text("انصراف", color = MaterialTheme.colorScheme.onError)
+                            Text("انصراف", style = MaterialTheme.typography.titleMedium)
                         }
                     }
                 }
@@ -363,18 +386,26 @@ fun EditProductDialog(
     var expanded by remember { mutableStateOf(false) }
     var categoryExpanded by remember { mutableStateOf(false) }
     var isUnitManuallyEdited by remember { mutableStateOf(false) }
+    val scrollState = rememberScrollState()
     val units = listOf("عدد", "متر", "کیلو", "جین", "بسته", "لیتر", "گالن", "شاخه", "حلقه", "جفت", "قوطی", "جعبه", "رول", "ست")
 
     val currentFontFamily = MaterialTheme.typography.bodyLarge.fontFamily
 
     Dialog(onDismissRequest = onDismiss) {
         CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
-            Surface(
+                Surface(
                 shape = MaterialTheme.shapes.extraLarge,
                 tonalElevation = 6.dp,
-                modifier = Modifier.fillMaxWidth().padding(16.dp)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp)
+                    .heightIn(max = 650.dp)
             ) {
-                Column(modifier = Modifier.padding(24.dp)) {
+                Column(
+                    modifier = Modifier
+                        .padding(24.dp)
+                        .verticalScroll(scrollState)
+                ) {
                     Text(
                         text = "ویرایش محصول",
                         style = MaterialTheme.typography.headlineSmall,
@@ -387,7 +418,8 @@ fun EditProductDialog(
                             onValueChange = { name = it },
                             label = { Text("نام کالا") },
                             modifier = Modifier.fillMaxWidth(),
-                            textStyle = TextStyle(fontFamily = currentFontFamily)
+                            textStyle = TextStyle(fontFamily = currentFontFamily),
+                            singleLine = true
                         )
                         OutlinedTextField(
                             value = price,
@@ -401,9 +433,14 @@ fun EditProductDialog(
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                             visualTransformation = PersianNumberVisualTransformation(),
                             modifier = Modifier.fillMaxWidth(),
-                            textStyle = TextStyle(fontFamily = currentFontFamily)
+                            textStyle = TextStyle(fontFamily = currentFontFamily),
+                            singleLine = true
                         )
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
                             OutlinedTextField(
                                 value = wholesalePrice,
                                 onValueChange = { input -> 
@@ -414,7 +451,8 @@ fun EditProductDialog(
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                                 visualTransformation = PersianNumberVisualTransformation(),
                                 modifier = Modifier.weight(1f),
-                                textStyle = TextStyle(fontFamily = currentFontFamily)
+                                textStyle = TextStyle(fontFamily = currentFontFamily),
+                                singleLine = true
                             )
                             OutlinedTextField(
                                 value = partnerPrice,
@@ -426,7 +464,8 @@ fun EditProductDialog(
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                                 visualTransformation = PersianNumberVisualTransformation(),
                                 modifier = Modifier.weight(1f),
-                                textStyle = TextStyle(fontFamily = currentFontFamily)
+                                textStyle = TextStyle(fontFamily = currentFontFamily),
+                                singleLine = true
                             )
                         }
                         OutlinedTextField(
@@ -441,9 +480,14 @@ fun EditProductDialog(
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                             visualTransformation = PersianNumberVisualTransformation(),
                             modifier = Modifier.fillMaxWidth(),
-                            textStyle = TextStyle(fontFamily = currentFontFamily)
+                            textStyle = TextStyle(fontFamily = currentFontFamily),
+                            singleLine = true
                         )
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
                             OutlinedTextField(
                                 value = stock,
                                 onValueChange = { input ->
@@ -486,7 +530,8 @@ fun EditProductDialog(
                                 label = { Text("انتخاب یا تایپ دسته بندی") },
                                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = categoryExpanded) },
                                 modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryEditable).fillMaxWidth(),
-                                textStyle = TextStyle(fontFamily = currentFontFamily)
+                                textStyle = TextStyle(fontFamily = currentFontFamily),
+                                singleLine = true
                             )
                             val filteredCategories = categories.filter { 
                                 it.contains(category, ignoreCase = true) && it != "همه" && it != "بدون دسته بندی" 
@@ -508,34 +553,33 @@ fun EditProductDialog(
                                 }
                             }
                         }
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            ExposedDropdownMenuBox(
-                                expanded = expanded,
-                                onExpandedChange = { expanded = !expanded },
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                OutlinedTextField(
-                                    value = unit,
-                                    onValueChange = {
-                                        unit = it
-                                        isUnitManuallyEdited = true
-                                    },
-                                    label = { Text("واحد") },
-                                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-                                    modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryEditable).fillMaxWidth(),
-                                    textStyle = TextStyle(fontFamily = currentFontFamily)
-                                )
-                                ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                                    units.filter { it.contains(unit, ignoreCase = true) }.forEach { u ->
-                                        DropdownMenuItem(
-                                            text = { Text(u) },
-                                            onClick = { 
-                                                unit = u
-                                                isUnitManuallyEdited = true
-                                                expanded = false 
-                                            }
-                                        )
-                                    }
+                        ExposedDropdownMenuBox(
+                            expanded = expanded,
+                            onExpandedChange = { expanded = !expanded },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            OutlinedTextField(
+                                value = unit,
+                                onValueChange = {
+                                    unit = it
+                                    isUnitManuallyEdited = true
+                                },
+                                label = { Text("واحد") },
+                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                                modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryEditable).fillMaxWidth(),
+                                textStyle = TextStyle(fontFamily = currentFontFamily),
+                                singleLine = true
+                            )
+                            ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                                units.filter { it.contains(unit, ignoreCase = true) }.forEach { u ->
+                                    DropdownMenuItem(
+                                        text = { Text(u) },
+                                        onClick = { 
+                                            unit = u
+                                            isUnitManuallyEdited = true
+                                            expanded = false 
+                                        }
+                                    )
                                 }
                             }
                         }
@@ -545,7 +589,7 @@ fun EditProductDialog(
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         Button(
                             onClick = {
@@ -564,12 +608,9 @@ fun EditProductDialog(
                                 }
                             },
                             modifier = Modifier.weight(1f),
-                            shape = MaterialTheme.shapes.small,
-                            colors = androidx.compose.material3.ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme.colorScheme.primary
-                            )
+                            shape = MaterialTheme.shapes.medium
                         ) {
-                            Text("تایید", color = MaterialTheme.colorScheme.onPrimary)
+                            Text("تایید", style = MaterialTheme.typography.titleMedium)
                         }
                         Button(
                             onClick = onDismiss,
@@ -577,9 +618,9 @@ fun EditProductDialog(
                             colors = androidx.compose.material3.ButtonDefaults.buttonColors(
                                 containerColor = MaterialTheme.colorScheme.error
                             ),
-                            shape = MaterialTheme.shapes.small
+                            shape = MaterialTheme.shapes.medium
                         ) {
-                            Text("انصراف", color = MaterialTheme.colorScheme.onError)
+                            Text("انصراف", style = MaterialTheme.typography.titleMedium)
                         }
                     }
                 }

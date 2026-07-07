@@ -20,7 +20,7 @@ import com.oqba26.abzarforoush.util.UpdateInfo
 fun UpdateDialog(
     updateInfo: UpdateInfo,
     onDismiss: () -> Unit,
-    onConfirm: () -> Unit
+    onConfirm: () -> Unit,
 ) {
     Dialog(
         onDismissRequest = { if (!updateInfo.isForceUpdate) onDismiss() },
