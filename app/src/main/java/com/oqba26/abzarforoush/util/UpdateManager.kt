@@ -49,10 +49,18 @@ class UpdateManager(private val context: Context) {
     }
 
     suspend fun checkForUpdate(): UpdateInfo? = withContext(Dispatchers.IO) {
-        if (!isNetworkAvailable()) return@withContext null
+        if (!isNetworkAvailable()) {
+            android.util.Log.d("UpdateManager", "Network not available")
+            return@withContext null
+        }
 
         try {
-            val updateInfo: UpdateInfo = client.get(updateUrl).body()
+            val timestamp = System.currentTimeMillis()
+            val urlWithParams = if (updateUrl.contains("?")) "$updateUrl&t=$timestamp" else "$updateUrl?t=$timestamp"
+            
+            android.util.Log.d("UpdateManager", "Checking for update at: $urlWithParams")
+            val updateInfo: UpdateInfo = client.get(urlWithParams).body()
+            android.util.Log.d("UpdateManager", "Server version: ${updateInfo.versionCode}")
             
             val pInfo = context.packageManager.getPackageInfo(context.packageName, 0)
             val currentVersionCode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
@@ -61,11 +69,13 @@ class UpdateManager(private val context: Context) {
                 @Suppress("DEPRECATION")
                 pInfo.versionCode
             }
+            android.util.Log.d("UpdateManager", "Current version: $currentVersionCode")
 
             if (updateInfo.versionCode > currentVersionCode) {
                 return@withContext updateInfo
             }
         } catch (e: Exception) {
+            android.util.Log.e("UpdateManager", "Update check failed: ${e.message}")
             e.printStackTrace()
         }
         null

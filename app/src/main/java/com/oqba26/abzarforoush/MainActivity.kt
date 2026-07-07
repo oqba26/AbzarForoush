@@ -70,6 +70,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlin.time.Duration.Companion.milliseconds
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -121,6 +122,7 @@ class MainActivity : ComponentActivity() {
             var updateInfo by remember { mutableStateOf<UpdateInfo?>(null) }
 
             LaunchedEffect(Unit) {
+                kotlinx.coroutines.delay(2000.milliseconds)
                 updateInfo = updateManager.checkForUpdate()
             }
 
