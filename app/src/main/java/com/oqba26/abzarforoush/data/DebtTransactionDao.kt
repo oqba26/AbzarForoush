@@ -8,7 +8,7 @@ interface DebtTransactionDao {
     @Query("SELECT * FROM debt_transactions WHERE customerId = :customerId ORDER BY timestamp DESC")
     fun getTransactionsForCustomer(customerId: Int): Flow<List<DebtTransaction>>
 
-    @Insert
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(transaction: DebtTransaction)
 
     @Delete

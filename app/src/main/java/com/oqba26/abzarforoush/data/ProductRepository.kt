@@ -86,6 +86,18 @@ class ProductRepository(
         chequeDao.deleteCheque(cheque)
     }
 
+    suspend fun insertInvoiceRaw(invoice: Invoice) {
+        invoiceDao.insertInvoice(invoice)
+    }
+
+    suspend fun insertInvoiceItemsRaw(items: List<InvoiceItem>) {
+        invoiceDao.insertInvoiceItems(items)
+    }
+
+    suspend fun insertTransactionRaw(transaction: DebtTransaction) {
+        debtTransactionDao.insert(transaction)
+    }
+
     suspend fun saveInvoice(invoice: Invoice, items: List<InvoiceItem>) {
         val id = invoiceDao.insertInvoice(invoice)
         val itemsWithId = items.map { it.copy(invoiceId = id.toInt()) }

@@ -151,6 +151,7 @@ class ProductViewModel(private val repository: ProductRepository) : ViewModel() 
     fun addExpense(amount: Double, category: ExpenseCategory, description: String?) {
         viewModelScope.launch {
             repository.insertExpense(Expense(amount = amount, category = category, description = description))
+            launch { silentSync() }
         }
     }
 
@@ -158,18 +159,27 @@ class ProductViewModel(private val repository: ProductRepository) : ViewModel() 
     fun deleteExpense(expense: Expense) {
         viewModelScope.launch {
             repository.deleteExpense(expense)
+            launch {
+                try {
+                    SupabaseManager.getClient()?.postgrest?.from("expenses")?.delete {
+                        filter { Expense::id eq expense.id }
+                    }
+                } catch (_: Exception) {}
+            }
         }
     }
 
     fun addSupplier(name: String, phone: String? = null, address: String? = null) {
         viewModelScope.launch {
             repository.insertSupplier(Supplier(name = name, phoneNumber = phone, address = address))
+            launch { silentSync() }
         }
     }
 
     fun updateSupplier(supplier: Supplier) {
         viewModelScope.launch {
             repository.updateSupplier(supplier)
+            launch { silentSync() }
         }
     }
 
@@ -261,17 +271,13 @@ class ProductViewModel(private val repository: ProductRepository) : ViewModel() 
                         repository.getLastPriceForCustomer(it, product.name)
                     }
                     val basePrice = historicalPrice ?: product.price
-                    // Apply bundle discount proportionally or just add as is? 
-                    // Let's assume bundle discount is applied to the total later or we can reduce price here.
-                    // For simplicity, let's just add items at their base price.
-                    val sellPrice = basePrice
-                    
+
                     val existingItem = currentList.find { it.product.id == product.id }
                     if (existingItem != null) {
                         val index = currentList.indexOf(existingItem)
                         currentList[index] = existingItem.copy(quantity = existingItem.quantity + bundleItem.quantity)
                     } else {
-                        currentList.add(CartItem(product, bundleItem.quantity, sellPrice = sellPrice))
+                        currentList.add(CartItem(product, bundleItem.quantity, sellPrice = basePrice))
                     }
                 }
             }
@@ -342,6 +348,7 @@ class ProductViewModel(private val repository: ProductRepository) : ViewModel() 
                 )
             }
             repository.saveInvoice(invoice, invoiceItems)
+            launch { silentSync() }
             clearCart()
         }
     }
@@ -399,7 +406,13 @@ class ProductViewModel(private val repository: ProductRepository) : ViewModel() 
     fun deleteCustomer(customer: Customer) {
         viewModelScope.launch {
             repository.deleteCustomer(customer)
-            launch { silentSync() }
+            launch {
+                try {
+                    SupabaseManager.getClient()?.postgrest?.from("customers")?.delete {
+                        filter { Customer::id eq customer.id }
+                    }
+                } catch (_: Exception) {}
+            }
         }
     }
 
@@ -428,6 +441,9 @@ class ProductViewModel(private val repository: ProductRepository) : ViewModel() 
             
             val transactions = repository.getAllTransactionsList()
             client.postgrest["debt_transactions"].upsert(transactions)
+
+            val expenses = repository.allExpenses.first()
+            client.postgrest["expenses"].upsert(expenses)
         } catch (_: Exception) {
             Log.d("Sync", "Silent sync skipped: No internet")
         }
@@ -660,7 +676,6 @@ class ProductViewModel(private val repository: ProductRepository) : ViewModel() 
             }
             launch {
                 channel.postgresChangeFlow<PostgresAction.Delete>(schema = "public") { table = "products" }.collect { 
-                    // Remote delete: ideally we'd have deleteById, but for now we search locally
                     val id = it.oldRecord["id"]?.toString()?.toIntOrNull()
                     if (id != null) {
                         repository.allProducts.first().find { p -> p.id == id }?.let { prod ->
@@ -692,23 +707,25 @@ class ProductViewModel(private val repository: ProductRepository) : ViewModel() 
                 }
             }
 
-            // 3. Invoices & Transactions
+            // 3. Invoices, Items, Transactions & Expenses
             launch {
                 channel.postgresChangeFlow<PostgresAction.Insert>(schema = "public") { table = "invoices" }.collect { 
-                    val invoice = it.decodeRecord<Invoice>()
-                    // Note: We need items too for a full restore, but usually invoices are pushed with items.
-                    // If items come in a separate flow, Room will handle the relation if keys match.
-                    repository.allInvoices.first().find { inv -> inv.invoice.id == invoice.id } ?: run {
-                        // This is tricky because repository.saveInvoice handles items and stock.
-                        // For pure sync, we might just insert the raw invoice.
-                    }
+                    repository.insertInvoiceRaw(it.decodeRecord<Invoice>())
                 }
             }
-            
+            launch {
+                channel.postgresChangeFlow<PostgresAction.Insert>(schema = "public") { table = "invoice_items" }.collect { 
+                    repository.insertInvoiceItemsRaw(listOf(it.decodeRecord<InvoiceItem>()))
+                }
+            }
             launch {
                 channel.postgresChangeFlow<PostgresAction.Insert>(schema = "public") { table = "debt_transactions" }.collect { 
-                    // Update local debt transactions
-                    // repository.insertDebtTransaction(...) // Need to add this to repository if not there
+                    repository.insertTransactionRaw(it.decodeRecord<DebtTransaction>())
+                }
+            }
+            launch {
+                channel.postgresChangeFlow<PostgresAction.Insert>(schema = "public") { table = "expenses" }.collect { 
+                    repository.insertExpense(it.decodeRecord<Expense>())
                 }
             }
 
@@ -724,12 +741,24 @@ class ProductViewModel(private val repository: ProductRepository) : ViewModel() 
         viewModelScope.launch {
             val client = SupabaseManager.getClient() ?: return@launch
             try {
-                // 1. Pull latest data from Supabase to local DB
+                // 1. Pull EVERYTHING from Supabase to local DB
                 val remoteProducts = client.postgrest["products"].select().decodeList<Product>()
                 remoteProducts.forEach { repository.insert(it) }
 
                 val remoteCustomers = client.postgrest["customers"].select().decodeList<Customer>()
                 remoteCustomers.forEach { repository.insertCustomer(it) }
+                
+                val remoteInvoices = client.postgrest["invoices"].select().decodeList<Invoice>()
+                remoteInvoices.forEach { repository.insertInvoiceRaw(it) }
+                
+                val remoteItems = client.postgrest["invoice_items"].select().decodeList<InvoiceItem>()
+                repository.insertInvoiceItemsRaw(remoteItems)
+                
+                val remoteTransactions = client.postgrest["debt_transactions"].select().decodeList<DebtTransaction>()
+                remoteTransactions.forEach { repository.insertTransactionRaw(it) }
+                
+                val remoteExpenses = client.postgrest["expenses"].select().decodeList<Expense>()
+                remoteExpenses.forEach { repository.insertExpense(it) }
 
                 // 2. Push local data to Supabase (upsert)
                 val products = repository.allProducts.first()
@@ -747,7 +776,10 @@ class ProductViewModel(private val repository: ProductRepository) : ViewModel() 
                 val transactions = repository.getAllTransactionsList()
                 client.postgrest["debt_transactions"].upsert(transactions)
                 
-                Log.d("Sync", "Full sync completed")
+                val expenses = repository.allExpenses.first()
+                client.postgrest["expenses"].upsert(expenses)
+                
+                Log.d("Sync", "Full bidirectional sync completed")
             } catch (e: Exception) {
                 Log.e("Sync", "Manual sync failed", e)
             } finally {
