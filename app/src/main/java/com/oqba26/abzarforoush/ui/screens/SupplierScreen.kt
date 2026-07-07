@@ -14,16 +14,23 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
 import com.oqba26.abzarforoush.data.ProductViewModel
 import com.oqba26.abzarforoush.data.Supplier
+import androidx.compose.material.icons.filled.ShoppingCart
 import com.oqba26.abzarforoush.util.toPersianDigits
 import com.oqba26.abzarforoush.util.toPersianPrice
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SupplierScreen(viewModel: ProductViewModel, onNavigateBack: () -> Unit) {
+fun SupplierScreen(
+    viewModel: ProductViewModel, 
+    onNavigateBack: () -> Unit,
+    onStartPurchase: () -> Unit
+) {
     val suppliers by viewModel.allSuppliers.collectAsState()
     var showAddDialog by remember { mutableStateOf(false) }
     var supplierToEdit by remember { mutableStateOf<Supplier?>(null) }
@@ -62,7 +69,11 @@ fun SupplierScreen(viewModel: ProductViewModel, onNavigateBack: () -> Unit) {
                         SupplierItem(
                             supplier = supplier,
                             onEdit = { supplierToEdit = supplier },
-                            onDelete = { viewModel.deleteSupplier(supplier) }
+                            onDelete = { viewModel.deleteSupplier(supplier) },
+                            onPurchase = {
+                                viewModel.selectSupplierForCart(supplier.id)
+                                onStartPurchase()
+                            }
                         )
                     }
                 }
@@ -93,7 +104,7 @@ fun SupplierScreen(viewModel: ProductViewModel, onNavigateBack: () -> Unit) {
 }
 
 @Composable
-fun SupplierItem(supplier: Supplier, onEdit: () -> Unit, onDelete: () -> Unit) {
+fun SupplierItem(supplier: Supplier, onEdit: () -> Unit, onDelete: () -> Unit, onPurchase: () -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
@@ -121,6 +132,9 @@ fun SupplierItem(supplier: Supplier, onEdit: () -> Unit, onDelete: () -> Unit) {
                 }
             }
             Row {
+                IconButton(onClick = onPurchase) {
+                    Icon(Icons.Default.ShoppingCart, contentDescription = "ثبت خرید", tint = Color(0xFF2E7D32))
+                }
                 IconButton(onClick = onEdit) {
                     Icon(Icons.Default.Edit, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                 }
@@ -142,23 +156,50 @@ fun SupplierDialog(
     var phone by remember { mutableStateOf(supplier?.phoneNumber ?: "") }
     var address by remember { mutableStateOf(supplier?.address ?: "") }
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(if (supplier == null) "افزودن تامین‌کننده" else "ویرایش تامین‌کننده") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("نام") }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = phone, onValueChange = { phone = it }, label = { Text("تلفن") }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = address, onValueChange = { address = it }, label = { Text("آدرس") }, modifier = Modifier.fillMaxWidth())
+    Dialog(onDismissRequest = onDismiss) {
+        CompositionLocalProvider(LocalLayoutDirection provides androidx.compose.ui.unit.LayoutDirection.Rtl) {
+            Surface(
+                shape = MaterialTheme.shapes.extraLarge,
+                tonalElevation = 6.dp,
+                modifier = Modifier.fillMaxWidth().padding(16.dp)
+            ) {
+                Column(modifier = Modifier.padding(24.dp)) {
+                    Text(
+                        text = if (supplier == null) "افزودن تامین‌کننده" else "ویرایش تامین‌کننده",
+                        style = MaterialTheme.typography.headlineSmall,
+                        modifier = Modifier.padding(bottom = 16.dp)
+                    )
+
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("نام") }, modifier = Modifier.fillMaxWidth())
+                        OutlinedTextField(value = phone, onValueChange = { phone = it }, label = { Text("تلفن") }, modifier = Modifier.fillMaxWidth())
+                        OutlinedTextField(value = address, onValueChange = { address = it }, label = { Text("آدرس") }, modifier = Modifier.fillMaxWidth())
+                    }
+
+                    Spacer(modifier = Modifier.height(24.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = { if (name.isNotBlank()) onConfirm(name, phone, address) },
+                            modifier = Modifier.weight(1f),
+                            shape = MaterialTheme.shapes.small
+                        ) {
+                            Text("تایید")
+                        }
+                        Button(
+                            onClick = onDismiss,
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                            shape = MaterialTheme.shapes.small
+                        ) {
+                            Text("انصراف")
+                        }
+                    }
+                }
             }
-        },
-        confirmButton = {
-            Button(onClick = { if (name.isNotBlank()) onConfirm(name, phone, address) }) {
-                Text("تایید")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("انصراف") }
         }
-    )
+    }
 }

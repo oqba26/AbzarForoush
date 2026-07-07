@@ -7,10 +7,8 @@ import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -19,7 +17,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
@@ -61,13 +58,15 @@ fun BarcodeScannerDialog(
                         CameraPreview(onBarcodeScanned = onBarcodeScanned)
                     }
                     Spacer(modifier = Modifier.height(24.dp))
-                    Row(
+                    androidx.compose.material3.Button(
+                        onClick = onDismiss,
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.Start
+                        shape = MaterialTheme.shapes.small,
+                        colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.error
+                        )
                     ) {
-                        TextButton(onClick = onDismiss) {
-                            Text("بستن")
-                        }
+                        Text("انصراف", color = MaterialTheme.colorScheme.onError)
                     }
                 }
             }

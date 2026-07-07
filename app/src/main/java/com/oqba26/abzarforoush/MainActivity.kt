@@ -82,7 +82,7 @@ class MainActivity : ComponentActivity() {
         val tempSettings = SettingsManager(this)
         var isAlreadyLoggedIn = false
         var syncEnabled = true
-        var initialFont = "Vazirmatn"
+        var initialFont = "Estedad"
         var initialTheme = "Purple"
         runBlocking {
             initialFont = tempSettings.selectedFont.first()
@@ -366,7 +366,9 @@ class MainActivity : ComponentActivity() {
                     }
 
                     BackHandler {
-                        if (currentScreen != "products") {
+                        if (currentScreen == "customer_detail") {
+                            currentScreen = "customers"
+                        } else if (currentScreen != "products") {
                             currentScreen = "products"
                         } else {
                             showExitDialog = true
@@ -397,7 +399,7 @@ class MainActivity : ComponentActivity() {
                             }
                         }
                     ) { innerPadding ->
-                        Box(modifier = Modifier.padding(innerPadding)) {
+                        Box(modifier = Modifier.padding(bottom = innerPadding.calculateBottomPadding())) {
                             when (currentScreen) {
                                 "login" -> LoginScreen { 
                                     scope.launch { settingsManager.setLoggedIn(loggedIn = true) }
@@ -438,7 +440,11 @@ class MainActivity : ComponentActivity() {
                                 )
                                 "suppliers" -> SupplierScreen(
                                     viewModel = viewModel,
-                                    onNavigateBack = { currentScreen = "accounting" }
+                                    onNavigateBack = { currentScreen = "accounting" },
+                                    onStartPurchase = {
+                                        currentScreen = "products"
+                                        showCartSheet = true
+                                    }
                                 )
                                 "cheques" -> ChequeScreen(
                                     viewModel = viewModel,

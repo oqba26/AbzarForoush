@@ -154,6 +154,7 @@ class ProductViewModel(private val repository: ProductRepository) : ViewModel() 
         }
     }
 
+    @Suppress("unused")
     fun deleteExpense(expense: Expense) {
         viewModelScope.launch {
             repository.deleteExpense(expense)
@@ -224,12 +225,17 @@ class ProductViewModel(private val repository: ProductRepository) : ViewModel() 
 
     fun addToCart(product: Product) {
         val customerId = _selectedCustomerIdForCart.value
+        val isPurchase = _isPurchaseMode.value
         viewModelScope.launch {
             val historicalPrice = customerId?.let {
                 repository.getLastPriceForCustomer(it, product.name)
             }
             
-            val sellPrice = historicalPrice ?: product.price
+            val sellPrice = if (isPurchase) {
+                product.purchasePrice
+            } else {
+                historicalPrice ?: product.price
+            }
             
             val currentList = _cartItems.value.toMutableList()
             val existingItem = currentList.find { it.product.id == product.id }
@@ -376,9 +382,9 @@ class ProductViewModel(private val repository: ProductRepository) : ViewModel() 
         }
     }
 
-    fun addCustomer(name: String, phoneNumber: String? = null) {
+    fun addCustomer(name: String, phoneNumber: String? = null, landline: String? = null, address: String? = null, type: CustomerType = CustomerType.PERSON) {
         viewModelScope.launch {
-            repository.insertCustomer(Customer(name = name, phoneNumber = phoneNumber))
+            repository.insertCustomer(Customer(name = name, phoneNumber = phoneNumber, landline = landline, address = address, type = type))
             launch { silentSync() }
         }
     }
@@ -427,6 +433,7 @@ class ProductViewModel(private val repository: ProductRepository) : ViewModel() 
         }
     }
 
+    @Suppress("unused")
     fun getDebtTransactions(customerId: Int): Flow<List<DebtTransaction>> {
         return repository.getDebtTransactions(customerId)
     }
@@ -640,7 +647,7 @@ class ProductViewModel(private val repository: ProductRepository) : ViewModel() 
             val client = SupabaseManager.getClient() ?: return@launch
             val channel = client.channel("db-changes")
             
-            // Separate flows for each table
+            // 1. Products
             launch {
                 channel.postgresChangeFlow<PostgresAction.Insert>(schema = "public") { table = "products" }.collect { 
                     repository.insert(it.decodeRecord<Product>()) 
@@ -652,6 +659,19 @@ class ProductViewModel(private val repository: ProductRepository) : ViewModel() 
                 }
             }
             launch {
+                channel.postgresChangeFlow<PostgresAction.Delete>(schema = "public") { table = "products" }.collect { 
+                    // Remote delete: ideally we'd have deleteById, but for now we search locally
+                    val id = it.oldRecord["id"]?.toString()?.toIntOrNull()
+                    if (id != null) {
+                        repository.allProducts.first().find { p -> p.id == id }?.let { prod ->
+                            repository.delete(prod)
+                        }
+                    }
+                }
+            }
+
+            // 2. Customers
+            launch {
                 channel.postgresChangeFlow<PostgresAction.Insert>(schema = "public") { table = "customers" }.collect { 
                     repository.insertCustomer(it.decodeRecord<Customer>()) 
                 }
@@ -659,6 +679,36 @@ class ProductViewModel(private val repository: ProductRepository) : ViewModel() 
             launch {
                 channel.postgresChangeFlow<PostgresAction.Update>(schema = "public") { table = "customers" }.collect { 
                     repository.updateCustomer(it.decodeRecord<Customer>()) 
+                }
+            }
+            launch {
+                channel.postgresChangeFlow<PostgresAction.Delete>(schema = "public") { table = "customers" }.collect { 
+                    val id = it.oldRecord["id"]?.toString()?.toIntOrNull()
+                    if (id != null) {
+                        repository.allCustomers.first().find { c -> c.id == id }?.let { cust ->
+                            repository.deleteCustomer(cust)
+                        }
+                    }
+                }
+            }
+
+            // 3. Invoices & Transactions
+            launch {
+                channel.postgresChangeFlow<PostgresAction.Insert>(schema = "public") { table = "invoices" }.collect { 
+                    val invoice = it.decodeRecord<Invoice>()
+                    // Note: We need items too for a full restore, but usually invoices are pushed with items.
+                    // If items come in a separate flow, Room will handle the relation if keys match.
+                    repository.allInvoices.first().find { inv -> inv.invoice.id == invoice.id } ?: run {
+                        // This is tricky because repository.saveInvoice handles items and stock.
+                        // For pure sync, we might just insert the raw invoice.
+                    }
+                }
+            }
+            
+            launch {
+                channel.postgresChangeFlow<PostgresAction.Insert>(schema = "public") { table = "debt_transactions" }.collect { 
+                    // Update local debt transactions
+                    // repository.insertDebtTransaction(...) // Need to add this to repository if not there
                 }
             }
 

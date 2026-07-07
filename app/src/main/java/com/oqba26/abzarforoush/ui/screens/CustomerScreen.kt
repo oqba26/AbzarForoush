@@ -1,6 +1,8 @@
 package com.oqba26.abzarforoush.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -43,12 +45,14 @@ import com.oqba26.abzarforoush.data.Customer
 import com.oqba26.abzarforoush.data.ProductViewModel
 import com.oqba26.abzarforoush.ui.components.AddCustomerDialog
 import com.oqba26.abzarforoush.ui.components.CustomerItemCard
-import com.oqba26.abzarforoush.ui.components.DebtHistoryDialog
 import com.oqba26.abzarforoush.ui.components.EditCustomerDialog
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CustomerScreen(viewModel: ProductViewModel, onNavigateBack: () -> Unit) {
+fun CustomerScreen(
+    viewModel: ProductViewModel,
+    onNavigateBack: () -> Unit
+) {
     val customers by viewModel.allCustomers.collectAsState()
     var isRefreshing by remember { mutableStateOf(false) }
     val pullRefreshState = rememberPullToRefreshState()
@@ -56,23 +60,14 @@ fun CustomerScreen(viewModel: ProductViewModel, onNavigateBack: () -> Unit) {
     var showAddDialog by remember { mutableStateOf(false) }
     var customerToEdit by remember { mutableStateOf<Customer?>(null) }
     var customerToDelete by remember { mutableStateOf<Customer?>(null) }
-    var customerForHistory by remember { mutableStateOf<Customer?>(null) }
 
     if (showAddDialog) {
         AddCustomerDialog(
             onDismiss = { showAddDialog = false },
-            onConfirm = { name, phone ->
-                viewModel.addCustomer(name, phone)
+            onConfirm = { name, phone, landline, address, type ->
+                viewModel.addCustomer(name, phone, landline, address, type)
                 showAddDialog = false
             }
-        )
-    }
-
-    customerForHistory?.let { customer ->
-        DebtHistoryDialog(
-            customer = customer,
-            viewModel = viewModel,
-            onDismiss = { customerForHistory = null }
         )
     }
 
@@ -95,7 +90,7 @@ fun CustomerScreen(viewModel: ProductViewModel, onNavigateBack: () -> Unit) {
                     tonalElevation = 6.dp,
                     modifier = Modifier.fillMaxWidth().padding(16.dp)
                 ) {
-                    Column(modifier = Modifier.padding(24.dp)) {
+                    Column(modifier = Modifier.padding(24.dp).verticalScroll(rememberScrollState())) {
                         Text(
                             text = "حذف مشتری",
                             style = MaterialTheme.typography.headlineSmall,
@@ -173,29 +168,30 @@ fun CustomerScreen(viewModel: ProductViewModel, onNavigateBack: () -> Unit) {
                 viewModel.syncWithSupabase { isRefreshing = false }
             },
             state = pullRefreshState,
-            modifier = Modifier.padding(innerPadding)
+            modifier = Modifier.fillMaxSize()
         ) {
             if (customers.isEmpty()) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Box(modifier = Modifier.fillMaxSize().padding(innerPadding), contentAlignment = Alignment.Center) {
                     Text("هنوز مشتری ثبت نشده است.")
                 }
             } else {
                 LazyColumn(
                     modifier = Modifier
                         .fillMaxSize()
+                        .padding(innerPadding)
                         .padding(8.dp)
                 ) {
                     items(customers) { customer ->
                         CustomerItemCard(
                             customer = customer,
+                            viewModel = viewModel,
                             onSettleDebt = { amount -> viewModel.settleCustomerDebt(customer.id, amount) },
                             onEdit = { customerToEdit = customer },
                             onDelete = { customerToDelete = customer },
                             onNewInvoice = {
                                 viewModel.selectCustomerForCart(customer.id)
                                 onNavigateBack()
-                            },
-                            onViewHistory = { customerForHistory = customer }
+                            }
                         )
                     }
                 }

@@ -1,27 +1,15 @@
 package com.oqba26.abzarforoush.ui.components
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Inventory
-import androidx.compose.material.icons.filled.ShoppingCart
-import androidx.compose.material.icons.filled.Warning
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -30,6 +18,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.oqba26.abzarforoush.data.Product
 import com.oqba26.abzarforoush.data.BundleWithProducts
+import com.oqba26.abzarforoush.data.InvoiceWithItems
+import com.oqba26.abzarforoush.data.ProductViewModel
+import com.oqba26.abzarforoush.util.toPersianDateTimeString
 import com.oqba26.abzarforoush.util.toPersianDigits
 import com.oqba26.abzarforoush.util.toPersianNumber
 import com.oqba26.abzarforoush.util.toPersianPrice
@@ -94,157 +85,237 @@ fun BundleItemCard(
 @Composable
 fun ProductItem(
     product: Product, 
+    viewModel: ProductViewModel,
     isInCart: Boolean = false,
     isSaleMode: Boolean = false,
     onDelete: () -> Unit, 
     onEdit: () -> Unit, 
     onAddToCart: () -> Unit
 ) {
+    var isExpanded by remember { mutableStateOf(false) }
+    val allInvoices by viewModel.allInvoices.collectAsState()
+    
+    val productMovement = remember(allInvoices, product.name) {
+        allInvoices.flatMap { invoiceWithItems ->
+            invoiceWithItems.items.filter { it.productName == product.name }.map { item ->
+                MovementRecord(
+                    type = invoiceWithItems.invoice.type,
+                    quantity = item.quantity,
+                    price = item.priceAtSale,
+                    timestamp = invoiceWithItems.invoice.timestamp,
+                    partyName = invoiceWithItems.invoice.customerId?.toString() ?: "مشتری نقدی" // In real app, look up name
+                )
+            }
+        }.sortedByDescending { it.timestamp }
+    }
+
     val isLowStock = product.minStock > 0 && product.stock > 0 && product.stock <= product.minStock
     val isOutOfStock = product.stock <= 0
 
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 6.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
+            .padding(horizontal = 12.dp, vertical = 6.dp)
+            .clickable { isExpanded = !isExpanded },
+        elevation = CardDefaults.cardElevation(defaultElevation = if (isExpanded) 6.dp else 2.dp),
         colors = CardDefaults.cardColors(
-            containerColor = if (isInCart) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface
+            containerColor = if (isInCart) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f) else MaterialTheme.colorScheme.surface
         ),
+        border = if (isExpanded) BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)) else null,
         shape = MaterialTheme.shapes.medium
     ) {
-        Row(
-            modifier = Modifier
-                .padding(16.dp)
-                .fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = product.name, 
-                        style = MaterialTheme.typography.titleLarge.copy(
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 18.sp
-                        ), 
-                        modifier = Modifier.weight(1f),
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    if (isInCart) {
-                        Icon(
-                            imageVector = Icons.Default.CheckCircle,
-                            contentDescription = "In Cart",
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(20.dp)
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = product.name, 
+                            style = MaterialTheme.typography.titleLarge.copy(
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 18.sp
+                            ), 
+                            modifier = Modifier.weight(1f),
+                            color = MaterialTheme.colorScheme.onSurface
                         )
-                    }
-                }
-                
-                product.barcode?.let {
-                    Text(
-                        text = "بارکد: ${it.toPersianDigits()}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.outline,
-                        modifier = Modifier.padding(top = 2.dp)
-                    )
-                }
-                
-                Text(
-                    text = "دسته: ${product.category}",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.secondary,
-                    modifier = Modifier.padding(top = 2.dp)
-                )
-
-                Spacer(Modifier.height(8.dp))
-
-                // Price Section
-                Text(
-                    text = "قیمت هر ${product.unit}: ${product.price.toPersianPrice()}",
-                    style = MaterialTheme.typography.titleMedium.copy(
-                        fontWeight = FontWeight.ExtraBold,
-                        color = Color(0xFF2E7D32) // Dark Green for price
-                    )
-                )
-
-                Spacer(Modifier.height(4.dp))
-
-                // Stock Status Section
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    val stockColor = when {
-                        isOutOfStock -> Color.Red
-                        isLowStock -> Color(0xFFE65100) // Deep Orange
-                        else -> Color(0xFF4CAF50) // Material Green
+                        if (isInCart) {
+                            Icon(
+                                imageVector = Icons.Default.CheckCircle,
+                                contentDescription = "In Cart",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
                     }
                     
-                    val stockIcon = when {
-                        isOutOfStock -> Icons.Default.Warning
-                        isLowStock -> Icons.Default.Warning
-                        else -> Icons.Default.Inventory
+                    product.barcode?.let {
+                        Text(
+                            text = "بارکد: ${it.toPersianDigits()}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.outline,
+                            modifier = Modifier.padding(top = 2.dp)
+                        )
                     }
-
-                    Icon(
-                        imageVector = stockIcon,
-                        contentDescription = null,
-                        tint = stockColor,
-                        modifier = Modifier.size(16.dp)
+                    
+                    Text(
+                        text = "دسته: ${product.category}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.secondary,
+                        modifier = Modifier.padding(top = 2.dp)
                     )
 
-                    val stockText = when {
-                        isOutOfStock -> "ناموجود در انبار"
-                        isLowStock -> "فقط ${product.stock.toPersianNumber()} ${product.unit} باقی مانده!"
-                        else -> "موجودی: ${product.stock.toPersianNumber()} ${product.unit}"
-                    }
+                    Spacer(Modifier.height(8.dp))
 
                     Text(
-                        text = stockText,
-                        style = MaterialTheme.typography.bodySmall.copy(
-                            fontWeight = if (isLowStock || isOutOfStock) FontWeight.Bold else FontWeight.Normal
-                        ),
-                        color = stockColor
+                        text = "قیمت فعلی: ${product.price.toPersianPrice()}",
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontWeight = FontWeight.ExtraBold,
+                            color = Color(0xFF2E7D32)
+                        )
+                    )
+
+                    Spacer(Modifier.height(4.dp))
+
+                    StockStatus(isOutOfStock, isLowStock, product)
+                }
+
+                // Action Column
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    if (isSaleMode) {
+                        IconButton(
+                            onClick = { onAddToCart() },
+                            colors = androidx.compose.material3.IconButtonDefaults.iconButtonColors(
+                                containerColor = if (isInCart) MaterialTheme.colorScheme.primary else Color.Transparent,
+                                contentColor = if (isInCart) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary
+                            )
+                        ) {
+                            Icon(Icons.Default.ShoppingCart, contentDescription = "Add to Cart")
+                        }
+                    }
+                    
+                    Row {
+                        IconButton(onClick = onEdit, modifier = Modifier.size(36.dp)) {
+                            Icon(Icons.Default.Edit, "Edit", tint = MaterialTheme.colorScheme.secondary, modifier = Modifier.size(20.dp))
+                        }
+                        IconButton(onClick = onDelete, modifier = Modifier.size(36.dp)) {
+                            Icon(Icons.Default.Delete, "Delete", tint = Color.Red.copy(alpha = 0.7f), modifier = Modifier.size(20.dp))
+                        }
+                    }
+                    
+                    Icon(
+                        imageVector = if (isExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.outline
                     )
                 }
             }
 
-            // Action Buttons
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(4.dp)
+            AnimatedVisibility(
+                visible = isExpanded,
+                enter = expandVertically(),
+                exit = shrinkVertically()
             ) {
-                if (isSaleMode) {
-                    IconButton(
-                        onClick = { onAddToCart() },
-                        colors = androidx.compose.material3.IconButtonDefaults.iconButtonColors(
-                            containerColor = if (isInCart) MaterialTheme.colorScheme.primary else Color.Transparent,
-                            contentColor = if (isInCart) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary
-                        )
-                    ) {
-                        Icon(Icons.Default.ShoppingCart, contentDescription = "Add to Cart")
-                    }
-                }
-                
-                Row {
-                    IconButton(onClick = onEdit, modifier = Modifier.size(36.dp)) {
-                        Icon(
-                            Icons.Default.Edit, 
-                            contentDescription = "Edit", 
-                            tint = MaterialTheme.colorScheme.secondary,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                    IconButton(onClick = onDelete, modifier = Modifier.size(36.dp)) {
-                        Icon(
-                            Icons.Default.Delete, 
-                            contentDescription = "Delete", 
-                            tint = Color.Red.copy(alpha = 0.7f),
-                            modifier = Modifier.size(20.dp)
-                        )
+                Column(modifier = Modifier.padding(top = 16.dp)) {
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.outlineVariant)
+                    
+                    Text(
+                        text = "📊 گردش کالا و سابقه قیمت:", 
+                        style = MaterialTheme.typography.labelLarge, 
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+
+                    if (productMovement.isEmpty()) {
+                        Text("هنوز گردشی برای این کالا ثبت نشده است.", style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 8.dp))
+                    } else {
+                        Spacer(Modifier.height(8.dp))
+                        productMovement.take(5).forEach { record ->
+                            MovementItemRow(record, product.unit)
+                        }
                     }
                 }
             }
         }
+    }
+}
+
+data class MovementRecord(
+    val type: com.oqba26.abzarforoush.data.InvoiceType,
+    val quantity: Double,
+    val price: Double,
+    val timestamp: Long,
+    val partyName: String
+)
+
+@Composable
+fun MovementItemRow(record: MovementRecord, unit: String) {
+    val isSale = record.type == com.oqba26.abzarforoush.data.InvoiceType.SALE
+    
+    Column(modifier = Modifier.padding(vertical = 6.dp)) {
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Surface(
+                    color = if (isSale) Color(0xFFFFEBEE) else Color(0xFFE8F5E9),
+                    shape = MaterialTheme.shapes.extraSmall
+                ) {
+                    Text(
+                        text = if (isSale) "خروج (فروش)" else "ورود (خرید)",
+                        style = MaterialTheme.typography.labelSmall,
+                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
+                        color = if (isSale) Color.Red else Color(0xFF2E7D32)
+                    )
+                }
+                Spacer(Modifier.width(8.dp))
+                Text(text = record.timestamp.toPersianDateTimeString(), style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+            }
+            Text(
+                text = "${record.quantity.toPersianNumber()} $unit",
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.Bold
+            )
+        }
+        Row(modifier = Modifier.fillMaxWidth().padding(top = 2.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text(text = "قیمت ثبت شده: ${record.price.toPersianPrice()}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            // Party name can be added here if available
+        }
+        HorizontalDivider(modifier = Modifier.padding(top = 6.dp), thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)
+    }
+}
+
+@Composable
+fun StockStatus(isOutOfStock: Boolean, isLowStock: Boolean, product: Product) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        val stockColor = when {
+            isOutOfStock -> Color.Red
+            isLowStock -> Color(0xFFE65100)
+            else -> Color(0xFF4CAF50)
+        }
+        
+        val stockIcon = when {
+            isOutOfStock -> Icons.Default.Warning
+            isLowStock -> Icons.Default.Warning
+            else -> Icons.Default.Inventory
+        }
+
+        Icon(stockIcon, null, tint = stockColor, modifier = Modifier.size(16.dp))
+
+        val stockText = when {
+            isOutOfStock -> "ناموجود در انبار"
+            isLowStock -> "فقط ${product.stock.toPersianNumber()} ${product.unit} باقی مانده!"
+            else -> "موجودی: ${product.stock.toPersianNumber()} ${product.unit}"
+        }
+
+        Text(
+            text = stockText,
+            style = MaterialTheme.typography.bodySmall.copy(
+                fontWeight = if (isLowStock || isOutOfStock) FontWeight.Bold else FontWeight.Normal
+            ),
+            color = stockColor
+        )
     }
 }

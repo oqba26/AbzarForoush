@@ -89,16 +89,17 @@ fun UpdateDialog(
                     Button(
                         onClick = onConfirm,
                         modifier = Modifier.weight(1f),
-                        shape = MaterialTheme.shapes.medium
+                        shape = MaterialTheme.shapes.small
                     ) {
-                        Text("دریافت و نصب")
+                        Text("تایید و بروزرسانی")
                     }
                     
                     if (!updateInfo.isForceUpdate) {
-                        OutlinedButton(
+                        Button(
                             onClick = onDismiss,
                             modifier = Modifier.weight(1f),
-                            shape = MaterialTheme.shapes.medium
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                            shape = MaterialTheme.shapes.small
                         ) {
                             Text("بعداً")
                         }

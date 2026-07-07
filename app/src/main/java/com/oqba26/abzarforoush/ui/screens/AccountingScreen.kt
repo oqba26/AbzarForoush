@@ -1,5 +1,6 @@
 package com.oqba26.abzarforoush.ui.screens
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -33,19 +34,45 @@ import com.oqba26.abzarforoush.util.toPersianPrice
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AccountingScreen(
-    viewModel: ProductViewModel, 
+    viewModel: ProductViewModel,
     onNavigateBack: () -> Unit,
     onNavigateToSuppliers: () -> Unit,
     onNavigateToCheques: () -> Unit,
     onNavigateToCashbook: () -> Unit,
 ) {
     val expenses by viewModel.allExpenses.collectAsState()
+    val invoices by viewModel.allInvoices.collectAsState()
     var showAddExpenseDialog by remember { mutableStateOf(value = false) }
+
+    val totalIncome = remember(invoices) { invoices.sumOf { it.invoice.amountPaid } }
+    val totalExpenses = remember(expenses) { expenses.sumOf { it.amount } }
+    val balance = totalIncome - totalExpenses
+
+    val recentTransactions = remember(invoices, expenses) {
+        val list = mutableListOf<CombinedTransaction>()
+        invoices.forEach {
+            list.add(CombinedTransaction(
+                title = "فاکتور #${it.invoice.id} (${it.invoice.customerId ?: "نقدی"})",
+                amount = it.invoice.amountPaid,
+                timestamp = it.invoice.timestamp,
+                isIncome = true
+            ))
+        }
+        expenses.forEach {
+            list.add(CombinedTransaction(
+                title = getCategoryName(it.category),
+                amount = it.amount,
+                timestamp = it.timestamp,
+                isIncome = false
+            ))
+        }
+        list.sortedByDescending { it.timestamp }.take(20)
+    }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("حسابداری و هزینه‌ها") },
+                title = { Text("حسابداری و مدیریت مالی") },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -66,6 +93,32 @@ fun AccountingScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            // Summary Card
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text("خلاصه وضعیت مالی", style = MaterialTheme.typography.labelMedium)
+                    Spacer(Modifier.height(12.dp))
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        SummaryItem("درآمد (دریافتی)", totalIncome.toPersianPrice(), Color(0xFF2E7D32))
+                        SummaryItem("هزینه‌های جاری", totalExpenses.toPersianPrice(), MaterialTheme.colorScheme.error)
+                    }
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                        Text("مانده صندوق (سود):", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        Text(
+                            balance.toPersianPrice(),
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = if (balance >= 0) Color(0xFF2E7D32) else MaterialTheme.colorScheme.error
+                        )
+                    }
+                }
+            }
+
             // Navigation Cards
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 AccountingNavCard(
@@ -83,7 +136,7 @@ fun AccountingScreen(
                     modifier = Modifier.weight(1f)
                 )
                 AccountingNavCard(
-                    title = "دفتر صندوق",
+                    title = "ریز تراکنش‌ها",
                     icon = Icons.Default.AccountBalanceWallet,
                     color = MaterialTheme.colorScheme.primaryContainer,
                     onClick = onNavigateToCashbook,
@@ -98,30 +151,31 @@ fun AccountingScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("هزینه‌های جاری", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                Button(onClick = { showAddExpenseDialog = true }) {
+                Text("تراکنش‌های اخیر", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                Button(onClick = { showAddExpenseDialog = true }, shape = MaterialTheme.shapes.small) {
                     Icon(Icons.Default.Add, contentDescription = null)
                     Spacer(Modifier.width(4.dp))
-                    Text("هزینه جدید")
+                    Text("ثبت هزینه")
                 }
             }
 
-            if (expenses.isEmpty()) {
-                Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
-                    Text("هیچ هزینه‌ای ثبت نشده است.")
+            if (recentTransactions.isEmpty()) {
+                Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                    Text("هیچ تراکنشی ثبت نشده است.")
                 }
             } else {
                 LazyColumn(
                     modifier = Modifier.weight(1f),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    items(expenses) { expense ->
-                        ExpenseItem(expense) { viewModel.deleteExpense(expense) }
+                    items(recentTransactions) { transaction ->
+                        TransactionItemRow(transaction)
                     }
                 }
             }
         }
     }
+    // ... (Dialog part remains same)
 
     if (showAddExpenseDialog) {
         AddExpenseDialog(
@@ -129,6 +183,41 @@ fun AccountingScreen(
         ) { amount, category, desc ->
             viewModel.addExpense(amount, category, desc)
             showAddExpenseDialog = false
+        }
+    }
+}
+
+@Composable
+fun SummaryItem(label: String, value: String, color: Color) {
+    Column {
+        Text(label, style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+        Text(value, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold, color = color)
+    }
+}
+
+data class CombinedTransaction(val title: String, val amount: Double, val timestamp: Long, val isIncome: Boolean)
+
+@Composable
+fun TransactionItemRow(transaction: CombinedTransaction) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+    ) {
+        Row(
+            modifier = Modifier.padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(transaction.title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                Text(transaction.timestamp.toPersianDateString(), style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+            }
+            Text(
+                text = (if (transaction.isIncome) "+" else "-") + transaction.amount.toPersianPrice(),
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Bold,
+                color = if (transaction.isIncome) Color(0xFF2E7D32) else MaterialTheme.colorScheme.error
+            )
         }
     }
 }

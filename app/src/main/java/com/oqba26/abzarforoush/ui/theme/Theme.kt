@@ -80,9 +80,10 @@ fun AbzarForoushTheme(
         SideEffect {
             val context = view.context
             if (context is ComponentActivity) {
+                // Force white icons (SystemBarStyle.dark) because we have a colored (Purple/Blue/Green) TopAppBar
                 context.enableEdgeToEdge(
                     statusBarStyle = SystemBarStyle.dark(colorScheme.primary.toArgb()),
-                    navigationBarStyle = SystemBarStyle.dark(Color.Transparent.toArgb())
+                    navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT)
                 )
             }
         }

@@ -5,6 +5,8 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.Arrangement
@@ -137,7 +139,7 @@ fun ProductScreen(
                     tonalElevation = 6.dp,
                     modifier = Modifier.fillMaxWidth().padding(16.dp)
                 ) {
-                    Column(modifier = Modifier.padding(24.dp)) {
+                    Column(modifier = Modifier.padding(24.dp).verticalScroll(rememberScrollState())) {
                         Text(
                             text = "حذف محصول",
                             style = MaterialTheme.typography.headlineSmall,
@@ -190,7 +192,7 @@ fun ProductScreen(
                     tonalElevation = 6.dp,
                     modifier = Modifier.fillMaxWidth().padding(16.dp)
                 ) {
-                    Column(modifier = Modifier.padding(24.dp)) {
+                    Column(modifier = Modifier.padding(24.dp).verticalScroll(rememberScrollState())) {
                         Text(
                             text = "فاکتور ثبت شد",
                             style = MaterialTheme.typography.headlineSmall,
@@ -261,6 +263,7 @@ fun ProductScreen(
                 initialCustomerId = selectedCustomerId,
                 initialSupplierId = selectedSupplierId,
                 isPurchaseModeInitial = isPurchaseMode,
+                showTypeToggle = (selectedCustomerId == null && selectedSupplierId == null),
                 onRemove = { viewModel.removeFromCart(it) },
                 onUpdatePrice = { item, price -> viewModel.updateCartItemPrice(item, price) },
                 onUpdateQuantity = { item, qty -> viewModel.updateCartItemQuantity(item, qty) },
@@ -522,9 +525,9 @@ fun ProductScreen(
                 }
             },
             state = pullRefreshState,
-            modifier = Modifier.padding(innerPadding)
+            modifier = Modifier.fillMaxSize()
         ) {
-            Column(modifier = Modifier.fillMaxSize()) {
+            Column(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
                 SearchBar(
                     query = searchQuery,
                     onQueryChange = { viewModel.onSearchQueryChange(it) },
@@ -607,6 +610,7 @@ fun ProductScreen(
                             items(products) { product ->
                                 ProductItem(
                                     product = product,
+                                    viewModel = viewModel,
                                     isInCart = cartItems.any { it.product.id == product.id },
                                     isSaleMode = selectedCustomerId != null,
                                     onDelete = { productToDelete = product },

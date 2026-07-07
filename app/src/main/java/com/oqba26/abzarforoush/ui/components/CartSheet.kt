@@ -1,15 +1,18 @@
 package com.oqba26.abzarforoush.ui.components
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -18,6 +21,8 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -29,8 +34,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -58,6 +63,7 @@ fun CartSheetContent(
     initialCustomerId: Int? = null,
     initialSupplierId: Int? = null,
     isPurchaseModeInitial: Boolean = false,
+    showTypeToggle: Boolean = true,
     onRemove: (CartItem) -> Unit,
     onUpdatePrice: (CartItem, Double) -> Unit,
     onUpdateQuantity: (CartItem, Double) -> Unit,
@@ -92,7 +98,6 @@ fun CartSheetContent(
     var amountPaidText by remember { mutableStateOf("") }
     var expanded by remember { mutableStateOf(false) }
     var dueDate by remember { mutableStateOf<Long?>(null) }
-    var showDueDatePicker by remember { mutableStateOf(false) }
     
     val totalAmount = cartItems.sumOf { it.totalPrice }
     var totalDiscountText by remember { mutableStateOf("") }
@@ -106,316 +111,382 @@ fun CartSheetContent(
     ) {
         Text(
             text = if (isPurchaseMode) "فاکتور خرید (ورودی انبار)" else "فاکتور فروش جاری",
-            style = MaterialTheme.typography.headlineSmall,
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(bottom = 16.dp)
         )
-        
-        Row(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
-            FilterChip(
-                selected = !isPurchaseMode,
-                onClick = { isPurchaseMode = false },
-                label = { Text("فروش به مشتری") },
-                modifier = Modifier.weight(1f)
-            )
-            Spacer(Modifier.width(8.dp))
-            FilterChip(
-                selected = isPurchaseMode,
-                onClick = { isPurchaseMode = true },
-                label = { Text("خرید از تامین‌کننده") },
-                modifier = Modifier.weight(1f)
-            )
+
+        if (showTypeToggle) {
+            Row(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
+                FilterChip(
+                    selected = !isPurchaseMode,
+                    onClick = { isPurchaseMode = false },
+                    label = { Text("فروش به مشتری") },
+                    modifier = Modifier.weight(1f)
+                )
+                Spacer(Modifier.width(8.dp))
+                FilterChip(
+                    selected = isPurchaseMode,
+                    onClick = { isPurchaseMode = true },
+                    label = { Text("خرید از تامین‌کننده") },
+                    modifier = Modifier.weight(1f)
+                )
+            }
         }
 
         if (cartItems.isEmpty()) {
-            Text(text = "فاکتور خالی است.")
+            Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                Text(text = "فاکتور خالی است.")
+            }
         } else {
-            LazyColumn(modifier = Modifier.weight(1f, fill = false)) {
+            LazyColumn(
+                modifier = Modifier.weight(1f),
+                contentPadding = PaddingValues(bottom = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
                 items(cartItems) { item ->
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 8.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = item.product.name,
-                                style = MaterialTheme.typography.bodyLarge,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.weight(1f)
-                            )
-                            IconButton(onClick = { onRemove(item) }) {
-                                Icon(Icons.Default.Delete, contentDescription = "Remove", tint = MaterialTheme.colorScheme.error)
-                            }
-                        }
-                        
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Row(
-                                modifier = Modifier.weight(1.5f),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(2.dp)
-                            ) {
-                                IconButton(onClick = { if (item.quantity > 1) onUpdateQuantity(item, item.quantity - 1) }) {
-                                    Icon(Icons.Default.Remove, contentDescription = "Decrease")
-                                }
-                                OutlinedTextField(
-                                    value = item.quantity.toString(),
-                                    onValueChange = { input ->
-                                        val cleaned = input.cleanNumber()
-                                        cleaned.toDoubleOrNull()?.let { onUpdateQuantity(item, it) }
-                                    },
-                                    placeholder = { Text(item.product.unit, style = MaterialTheme.typography.bodySmall) },
-                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                    visualTransformation = PersianNumberVisualTransformation(),
-                                    modifier = Modifier.weight(1f),
-                                    textStyle = MaterialTheme.typography.bodyMedium.copy(textAlign = androidx.compose.ui.text.style.TextAlign.Center),
-                                    singleLine = true
-                                )
-                                IconButton(onClick = { onUpdateQuantity(item, item.quantity + 1) }) {
-                                    Icon(Icons.Default.Add, contentDescription = "Increase")
-                                }
-                            }
-
-                            OutlinedTextField(
-                                value = if (item.sellPrice == 0.0) "" else item.sellPrice.toLong().toString(),
-                                onValueChange = { input ->
-                                    val cleaned = input.cleanNumber()
-                                    cleaned.toDoubleOrNull()?.let { onUpdatePrice(item, it) }
-                                },
-                                label = { Text("قیمت واحد (تومان)", maxLines = 1) },
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                visualTransformation = PersianNumberVisualTransformation(),
-                                modifier = Modifier.weight(2f),
-                                textStyle = MaterialTheme.typography.bodyMedium,
-                                singleLine = true
-                            )
-                        }
-                        
-                        Text(
-                            text = "جمع: ${item.totalPrice.toPersianPrice()}",
-                            style = MaterialTheme.typography.bodySmall,
-                            modifier = Modifier.align(Alignment.End).padding(top = 4.dp),
-                            color = MaterialTheme.colorScheme.secondary
-                        )
-                    }
-                    HorizontalDivider()
+                    CartItemCard(item, onRemove, onUpdateQuantity, onUpdatePrice)
                 }
 
                 if (suggestions.isNotEmpty()) {
                     item {
-                        Column(modifier = Modifier.padding(vertical = 16.dp)) {
-                            Text(
-                                text = "پیشنهاد خرید (بر اساس تجربه قبلی):",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.primary,
-                                fontWeight = FontWeight.Bold
-                            )
-                            androidx.compose.foundation.lazy.LazyRow(
-                                modifier = Modifier.padding(top = 8.dp),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                items(suggestions) { product ->
-                                    androidx.compose.material3.SuggestionChip(
-                                        onClick = { onAddSuggestion(product) },
-                                        label = { Text(product.name, style = MaterialTheme.typography.labelSmall) },
-                                        icon = { Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp)) }
-                                    )
-                                }
-                            }
-                        }
+                        SuggestionsSection(suggestions, onAddSuggestion)
                     }
                 }
-            }
 
-            Spacer(Modifier.height(16.dp))
-            
-            Text(if (isPurchaseMode) "اطلاعات تامین‌کننده" else "اطلاعات مشتری", style = MaterialTheme.typography.titleMedium)
-            
-            // Intelligent Selection
-            ExposedDropdownMenuBox(
-                expanded = expanded,
-                onExpandedChange = { expanded = !expanded },
-                modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
-            ) {
-                OutlinedTextField(
-                    value = manualCustomerName,
-                    onValueChange = { 
-                        manualCustomerName = it
-                        expanded = true
-                        if (!isPurchaseMode) {
-                            val match = customers.find { c -> c.name == it }
-                            if (match != null) {
-                                selectedCustomerId = match.id
-                                manualCustomerPhone = match.phoneNumber ?: ""
-                                onCustomerSelected(match.id)
+                item {
+                    CustomerInfoSection(
+                        isPurchaseMode = isPurchaseMode,
+                        manualCustomerName = manualCustomerName,
+                        onNameChange = { name, id, phone ->
+                            manualCustomerName = name
+                            if (!isPurchaseMode) {
+                                selectedCustomerId = id
+                                manualCustomerPhone = phone ?: ""
+                                onCustomerSelected(id)
                             } else {
-                                selectedCustomerId = null
-                                onCustomerSelected(null)
+                                selectedSupplierId = id
+                                manualCustomerPhone = phone ?: ""
+                                onSupplierSelected(id)
                             }
-                        } else {
-                            val match = suppliers.find { s -> s.name == it }
-                            if (match != null) {
-                                selectedSupplierId = match.id
-                                manualCustomerPhone = match.phoneNumber ?: ""
-                                onSupplierSelected(match.id)
-                            } else {
-                                selectedSupplierId = null
-                                onSupplierSelected(null)
-                            }
-                        }
-                    },
-                    label = { Text(if (isPurchaseMode) "نام تامین‌کننده" else "نام مشتری (جستجوی هوشمند)") },
-                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-                    modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryEditable).fillMaxWidth()
-                )
-                
-                val filteredItems = if (!isPurchaseMode) {
-                    customers.filter { it.name.contains(manualCustomerName, ignoreCase = true) || (it.phoneNumber?.contains(manualCustomerName) ?: false) }
-                } else {
-                    suppliers.filter { it.name.contains(manualCustomerName, ignoreCase = true) || (it.phoneNumber?.contains(manualCustomerName) ?: false) }
-                }
-                
-                if (filteredItems.isNotEmpty()) {
-                    ExposedDropdownMenu(
+                        },
+                        manualCustomerPhone = manualCustomerPhone,
+                        onPhoneChange = { manualCustomerPhone = it },
+                        customers = customers,
+                        suppliers = suppliers,
                         expanded = expanded,
-                        onDismissRequest = { expanded = false }
-                    ) {
-                        filteredItems.forEach { item ->
-                            val name = if (item is Customer) item.name else (item as com.oqba26.abzarforoush.data.Supplier).name
-                            val phone = if (item is Customer) item.phoneNumber else (item as com.oqba26.abzarforoush.data.Supplier).phoneNumber
-                            val id = if (item is Customer) item.id else (item as com.oqba26.abzarforoush.data.Supplier).id
-                            
-                            DropdownMenuItem(
-                                text = { 
-                                    Column {
-                                        Text(name)
-                                        phone?.let { 
-                                            Text(it.toPersianDigits(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
-                                        }
-                                    }
-                                },
-                                onClick = { 
-                                    if (!isPurchaseMode) {
-                                        selectedCustomerId = id
-                                        onCustomerSelected(id)
-                                    } else {
-                                        selectedSupplierId = id
-                                        onSupplierSelected(id)
-                                    }
-                                    manualCustomerName = name
-                                    manualCustomerPhone = phone ?: ""
-                                    expanded = false 
-                                }
-                            )
-                        }
-                    }
+                        onExpandedChange = { expanded = it },
+                        amountPaidText = amountPaidText,
+                        onAmountPaidChange = { amountPaidText = it },
+                        totalDiscountText = totalDiscountText,
+                        onTotalDiscountChange = { totalDiscountText = it },
+                        isDebt = isDebt,
+                        dueDate = dueDate,
+                        onDueDateChange = { dueDate = it }
+                    )
+                }
+            }
+        }
+
+        // Fixed Footer
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            tonalElevation = 2.dp,
+            shadowElevation = 8.dp
+        ) {
+            Column(modifier = Modifier.padding(top = 16.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(text = "قابل پرداخت:", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        text = finalAmount.toPersianPrice(),
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+
+                Spacer(Modifier.height(16.dp))
+
+                Button(
+                    onClick = {
+                        val discount = totalDiscountText.cleanNumber().toDoubleOrNull() ?: 0.0
+                        val paid = amountPaidText.cleanNumber().toDoubleOrNull() ?: 0.0
+                        onCheckout(
+                            selectedCustomerId,
+                            selectedSupplierId,
+                            paid,
+                            discount,
+                            manualCustomerName,
+                            manualCustomerPhone,
+                            dueDate,
+                            if (isPurchaseMode) com.oqba26.abzarforoush.data.InvoiceType.PURCHASE else com.oqba26.abzarforoush.data.InvoiceType.SALE
+                        )
+                    },
+                    modifier = Modifier.fillMaxWidth().height(56.dp),
+                    shape = MaterialTheme.shapes.medium
+                ) {
+                    Icon(Icons.Default.Save, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("تایید و ثبت نهایی فاکتور", style = MaterialTheme.typography.titleMedium)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun CartItemCard(
+    item: CartItem,
+    onRemove: (CartItem) -> Unit,
+    onUpdateQuantity: (CartItem, Double) -> Unit,
+    onUpdatePrice: (CartItem, Double) -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = item.product.name,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.weight(1f)
+                )
+                IconButton(onClick = { onRemove(item) }, modifier = Modifier.size(32.dp)) {
+                    Icon(Icons.Default.Delete, null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(20.dp))
                 }
             }
 
-            // Phone Field (Name field is now part of the search)
-            OutlinedTextField(
-                value = manualCustomerPhone.toPersianDigits(),
-                onValueChange = { manualCustomerPhone = it.cleanNumber() },
-                label = { Text("شماره تماس") },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
-                modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
-            )
+            Spacer(Modifier.height(8.dp))
 
-            OutlinedTextField(
-                value = amountPaidText,
-                onValueChange = { input -> 
-                    val cleaned = input.cleanNumber()
-                    if (cleaned.isEmpty() || cleaned.toDoubleOrNull() != null) {
-                        amountPaidText = cleaned
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Quantity with label
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("تعداد (${item.product.unit})", style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(bottom = 4.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(onClick = { if (item.quantity > 0) onUpdateQuantity(item, item.quantity - 1) }, modifier = Modifier.size(32.dp)) {
+                            Icon(Icons.Default.Remove, null)
+                        }
+                        Text(
+                            text = item.quantity.toString().toPersianDigits(),
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 8.dp)
+                        )
+                        IconButton(onClick = { onUpdateQuantity(item, item.quantity + 1) }, modifier = Modifier.size(32.dp)) {
+                            Icon(Icons.Default.Add, null)
+                        }
                     }
-                },
-                label = { Text("مبلغ پرداختی (تومان)") },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                visualTransformation = PersianNumberVisualTransformation(),
-                modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
-            )
+                }
 
+                // Price unit
+                OutlinedTextField(
+                    value = if (item.sellPrice == 0.0) "" else item.sellPrice.toLong().toString(),
+                    onValueChange = { input ->
+                        val cleaned = input.cleanNumber()
+                        cleaned.toDoubleOrNull()?.let { onUpdatePrice(item, it) }
+                    },
+                    label = { Text("قیمت واحد") },
+                    modifier = Modifier.weight(1.2f),
+                    textStyle = MaterialTheme.typography.bodyMedium,
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    visualTransformation = PersianNumberVisualTransformation()
+                )
+            }
+
+            Text(
+                text = "جمع: ${item.totalPrice.toPersianPrice()}",
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.align(Alignment.End).padding(top = 8.dp)
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun CustomerInfoSection(
+    isPurchaseMode: Boolean,
+    manualCustomerName: String,
+    onNameChange: (String, Int?, String?) -> Unit,
+    manualCustomerPhone: String,
+    onPhoneChange: (String) -> Unit,
+    customers: List<Customer>,
+    suppliers: List<com.oqba26.abzarforoush.data.Supplier>,
+    expanded: Boolean,
+    onExpandedChange: (Boolean) -> Unit,
+    amountPaidText: String,
+    onAmountPaidChange: (String) -> Unit,
+    totalDiscountText: String,
+    onTotalDiscountChange: (String) -> Unit,
+    isDebt: Boolean,
+    dueDate: Long?,
+    onDueDateChange: (Long?) -> Unit
+) {
+    Column(modifier = Modifier.padding(top = 16.dp)) {
+        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+        Text(
+            text = if (isPurchaseMode) "اطلاعات تامین‌کننده" else "اطلاعات مشتری",
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.primary,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(bottom = 12.dp)
+        )
+
+        ExposedDropdownMenuBox(
+            expanded = expanded,
+            onExpandedChange = onExpandedChange,
+            modifier = Modifier.fillMaxWidth()
+        ) {
             OutlinedTextField(
-                value = totalDiscountText,
-                onValueChange = { input -> 
-                    val cleaned = input.cleanNumber()
-                    if (cleaned.isEmpty() || cleaned.toDoubleOrNull() != null) {
-                        totalDiscountText = cleaned
+                value = manualCustomerName,
+                onValueChange = { input ->
+                    val matchId: Int?
+                    val matchPhone: String?
+                    if (!isPurchaseMode) {
+                        val match = customers.find { it.name == input }
+                        matchId = match?.id
+                        matchPhone = match?.phoneNumber
+                    } else {
+                        val match = suppliers.find { it.name == input }
+                        matchId = match?.id
+                        matchPhone = match?.phoneNumber
                     }
+                    onNameChange(input, matchId, matchPhone)
+                    onExpandedChange(true)
                 },
-                label = { Text("تخفیف روی کل فاکتور (تومان)") },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                visualTransformation = PersianNumberVisualTransformation(),
-                modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+                label = { Text(if (isPurchaseMode) "نام تامین‌کننده" else "نام مشتری (جستجوی هوشمند)") },
+                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryEditable).fillMaxWidth()
             )
 
-            if (isDebt) {
-                Spacer(Modifier.height(8.dp))
-                Text("تاریخ سررسید بدهی", style = MaterialTheme.typography.labelMedium)
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+            val filteredItems = if (!isPurchaseMode) {
+                customers.filter { it.name.contains(manualCustomerName, ignoreCase = true) }
+            } else {
+                suppliers.filter { it.name.contains(manualCustomerName, ignoreCase = true) }
+            }
+
+            if (filteredItems.isNotEmpty() && expanded) {
+                ExposedDropdownMenu(
+                    expanded = true,
+                    onDismissRequest = { onExpandedChange(false) }
                 ) {
-                    listOf(
-                        "۷ روزه" to (7L * 24 * 60 * 60 * 1000),
-                        "۱۵ روزه" to (15L * 24 * 60 * 60 * 1000),
-                        "۳۰ روزه" to (30L * 24 * 60 * 60 * 1000)
-                    ).forEach { (label, duration) ->
-                        val targetDate = System.currentTimeMillis() + duration
-                        FilterChip(
-                            selected = dueDate == targetDate,
-                            onClick = { dueDate = if (dueDate == targetDate) null else targetDate },
-                            label = { Text(label) }
+                    filteredItems.forEach { item ->
+                        val name = if (item is Customer) item.name else (item as com.oqba26.abzarforoush.data.Supplier).name
+                        val phone = if (item is Customer) item.phoneNumber else (item as com.oqba26.abzarforoush.data.Supplier).phoneNumber
+                        val id = if (item is Customer) item.id else (item as com.oqba26.abzarforoush.data.Supplier).id
+
+                        DropdownMenuItem(
+                            text = {
+                                Column {
+                                    Text(name)
+                                    phone?.let {
+                                        Text(it.toPersianDigits(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
+                                    }
+                                }
+                            },
+                            onClick = {
+                                onNameChange(name, id, phone)
+                                onExpandedChange(false)
+                            }
                         )
                     }
                 }
             }
+        }
 
-            Spacer(Modifier.height(16.dp))
+        OutlinedTextField(
+            value = manualCustomerPhone.toPersianDigits(),
+            onValueChange = { onPhoneChange(it.cleanNumber()) },
+            label = { Text("شماره تماس") },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+            modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+        )
 
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 8.dp),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text(text = "قابل پرداخت:", style = MaterialTheme.typography.titleLarge)
-                Text(
-                    text = finalAmount.toPersianPrice(),
-                    style = MaterialTheme.typography.titleLarge,
-                    color = MaterialTheme.colorScheme.primary
+        OutlinedTextField(
+            value = amountPaidText,
+            onValueChange = { onAmountPaidChange(it.cleanNumber()) },
+            label = { Text("مبلغ پرداختی (تومان)") },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            visualTransformation = PersianNumberVisualTransformation(),
+            modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+        )
+
+        OutlinedTextField(
+            value = totalDiscountText,
+            onValueChange = { onTotalDiscountChange(it.cleanNumber()) },
+            label = { Text("تخفیف روی کل فاکتور (تومان)") },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            visualTransformation = PersianNumberVisualTransformation(),
+            modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+        )
+
+        if (isDebt) {
+            DebtSection(dueDate, onDueDateChange)
+        }
+    }
+}
+
+@Composable
+fun SuggestionsSection(suggestions: List<com.oqba26.abzarforoush.data.Product>, onAddSuggestion: (com.oqba26.abzarforoush.data.Product) -> Unit) {
+    Column(modifier = Modifier.padding(vertical = 8.dp)) {
+        Text(
+            text = "پیشنهاد خرید:",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.primary,
+            fontWeight = FontWeight.Bold
+        )
+        androidx.compose.foundation.lazy.LazyRow(
+            modifier = Modifier.padding(top = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            items(suggestions) { product ->
+                androidx.compose.material3.SuggestionChip(
+                    onClick = { onAddSuggestion(product) },
+                    label = { Text(product.name, style = MaterialTheme.typography.labelSmall) },
+                    icon = { Icon(Icons.Default.Add, null, modifier = Modifier.size(14.dp)) }
                 )
             }
+        }
+    }
+}
 
-            Button(
-                onClick = { 
-                    val discount = totalDiscountText.cleanNumber().toDoubleOrNull() ?: 0.0
-                    val paid = amountPaidText.cleanNumber().toDoubleOrNull() ?: 0.0
-                    onCheckout(
-                        selectedCustomerId, 
-                        selectedSupplierId, 
-                        paid, 
-                        discount, 
-                        manualCustomerName, 
-                        manualCustomerPhone, 
-                        dueDate,
-                        if (isPurchaseMode) com.oqba26.abzarforoush.data.InvoiceType.PURCHASE else com.oqba26.abzarforoush.data.InvoiceType.SALE
-                    )
-                },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Icon(Icons.Default.Save, contentDescription = null)
-                Spacer(modifier = Modifier.padding(horizontal = 4.dp))
-                Text("تایید و ثبت نهایی فاکتور")
+@Composable
+fun DebtSection(dueDate: Long?, onDueDateChange: (Long?) -> Unit) {
+    Column(modifier = Modifier.padding(top = 12.dp)) {
+        Text("تاریخ سررسید بدهی", style = MaterialTheme.typography.labelMedium)
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            listOf(
+                "۷ روزه" to (7L * 24 * 60 * 60 * 1000),
+                "۱۵ روزه" to (15L * 24 * 60 * 60 * 1000),
+                "۳۰ روزه" to (30L * 24 * 60 * 60 * 1000)
+            ).forEach { (label, duration) ->
+                val targetDate = System.currentTimeMillis() + duration
+                FilterChip(
+                    selected = dueDate == targetDate,
+                    onClick = { onDueDateChange(if (dueDate == targetDate) null else targetDate) },
+                    label = { Text(label) }
+                )
             }
         }
-        Spacer(modifier = Modifier.height(32.dp))
     }
 }

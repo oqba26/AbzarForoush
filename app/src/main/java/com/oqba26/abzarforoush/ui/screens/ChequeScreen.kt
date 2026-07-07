@@ -14,9 +14,11 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
 import com.oqba26.abzarforoush.data.Cheque
 import com.oqba26.abzarforoush.data.ChequeStatus
 import com.oqba26.abzarforoush.data.ChequeType
@@ -162,50 +164,89 @@ fun AddChequeDialog(onDismiss: () -> Unit, onConfirm: (String, String, Double, L
     // Simple mock date picker (in real app we'd use a proper date picker)
     var daysFromNow by remember { mutableStateOf("30") }
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("ثبت چک جدید") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Row(modifier = Modifier.fillMaxWidth()) {
-                    FilterChip(selected = type == ChequeType.RECEIVABLE, onClick = { type = ChequeType.RECEIVABLE }, label = { Text("دریافتی") }, modifier = Modifier.weight(1f))
-                    Spacer(Modifier.width(8.dp))
-                    FilterChip(selected = type == ChequeType.PAYABLE, onClick = { type = ChequeType.PAYABLE }, label = { Text("پرداختی") }, modifier = Modifier.weight(1f))
+    Dialog(onDismissRequest = onDismiss) {
+        CompositionLocalProvider(LocalLayoutDirection provides androidx.compose.ui.unit.LayoutDirection.Rtl) {
+            Surface(
+                shape = MaterialTheme.shapes.extraLarge,
+                tonalElevation = 6.dp,
+                modifier = Modifier.fillMaxWidth().padding(16.dp)
+            ) {
+                Column(modifier = Modifier.padding(24.dp)) {
+                    Text(
+                        text = "ثبت چک جدید",
+                        style = MaterialTheme.typography.headlineSmall,
+                        modifier = Modifier.padding(bottom = 16.dp)
+                    )
+
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(modifier = Modifier.fillMaxWidth()) {
+                            FilterChip(
+                                selected = type == ChequeType.RECEIVABLE,
+                                onClick = { type = ChequeType.RECEIVABLE },
+                                label = { Text("دریافتی") },
+                                modifier = Modifier.weight(1f)
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            FilterChip(
+                                selected = type == ChequeType.PAYABLE,
+                                onClick = { type = ChequeType.PAYABLE },
+                                label = { Text("پرداختی") },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                        OutlinedTextField(value = chequeNumber, onValueChange = { chequeNumber = it }, label = { Text("شماره چک") }, modifier = Modifier.fillMaxWidth())
+                        OutlinedTextField(value = bankName, onValueChange = { bankName = it }, label = { Text("نام بانک") }, modifier = Modifier.fillMaxWidth())
+                        OutlinedTextField(value = personName, onValueChange = { personName = it }, label = { Text("نام شخص (مشتری/تامین‌کننده)") }, modifier = Modifier.fillMaxWidth())
+                        OutlinedTextField(
+                            value = amount, 
+                            onValueChange = { amount = it.cleanNumber() }, 
+                            label = { Text("مبلغ (تومان)") }, 
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            visualTransformation = PersianNumberVisualTransformation(),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        OutlinedTextField(
+                            value = daysFromNow, 
+                            onValueChange = { daysFromNow = it.cleanNumber() }, 
+                            label = { Text("سررسید (چند روز دیگر؟)") }, 
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(24.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = {
+                                val amt = amount.cleanNumber().toDoubleOrNull() ?: 0.0
+                                val days = daysFromNow.cleanNumber().toLongOrNull() ?: 30L
+                                val dueDate = System.currentTimeMillis() + (days * 24 * 60 * 60 * 1000L)
+                                if (chequeNumber.isNotBlank() && amt > 0) {
+                                    onConfirm(chequeNumber, bankName, amt, dueDate, personName, type)
+                                }
+                            },
+                            modifier = Modifier.weight(1f),
+                            shape = MaterialTheme.shapes.small
+                        ) {
+                            Text("تایید")
+                        }
+                        Button(
+                            onClick = onDismiss,
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                            shape = MaterialTheme.shapes.small
+                        ) {
+                            Text("انصراف")
+                        }
+                    }
                 }
-                OutlinedTextField(value = chequeNumber, onValueChange = { chequeNumber = it }, label = { Text("شماره چک") }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = bankName, onValueChange = { bankName = it }, label = { Text("نام بانک") }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = personName, onValueChange = { personName = it }, label = { Text("نام شخص (مشتری/تامین‌کننده)") }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(
-                    value = amount, 
-                    onValueChange = { amount = it.cleanNumber() }, 
-                    label = { Text("مبلغ (تومان)") }, 
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    visualTransformation = PersianNumberVisualTransformation(),
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedTextField(
-                    value = daysFromNow, 
-                    onValueChange = { daysFromNow = it.cleanNumber() }, 
-                    label = { Text("سررسید (چند روز دیگر؟)") }, 
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    modifier = Modifier.fillMaxWidth()
-                )
             }
-        },
-        confirmButton = {
-            Button(onClick = {
-                val amt = amount.cleanNumber().toDoubleOrNull() ?: 0.0
-                val days = daysFromNow.cleanNumber().toLongOrNull() ?: 30L
-                val dueDate = System.currentTimeMillis() + (days * 24 * 60 * 60 * 1000L)
-                if (chequeNumber.isNotBlank() && amt > 0) {
-                    onConfirm(chequeNumber, bankName, amt, dueDate, personName, type)
-                }
-            }) { Text("تایید") }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("انصراف") }
         }
-    )
+    }
 }
 
 fun ChequeStatus.toPersian(): String = when(this) {

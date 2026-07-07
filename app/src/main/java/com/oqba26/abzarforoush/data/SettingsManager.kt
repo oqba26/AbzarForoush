@@ -26,7 +26,7 @@ class SettingsManager(private val context: Context) {
     }
 
     val selectedFont: Flow<String> = context.dataStore.data.map { preferences ->
-        preferences[SELECTED_FONT] ?: "Vazirmatn"
+        preferences[SELECTED_FONT] ?: "Estedad"
     }
 
     val selectedTheme: Flow<String> = context.dataStore.data.map { preferences ->
