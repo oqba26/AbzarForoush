@@ -452,29 +452,54 @@ class ProductViewModel(private val repository: ProductRepository) : ViewModel() 
 
     private suspend fun silentSync() {
         val client = SupabaseManager.getClient() ?: return
-        
-        // Sync each table independently so one failure doesn't block others
-        val tables = listOf<Pair<String, suspend () -> List<Any>>>(
-            "products" to { repository.allProducts.first() },
-            "customers" to { repository.allCustomers.first() },
-            "invoices" to { repository.allInvoices.first().map { it.invoice } },
-            "invoice_items" to { repository.allInvoiceItems.first() },
-            "debt_transactions" to { repository.getAllTransactionsList() },
-            "expenses" to { repository.getAllExpensesList() },
-            "suppliers" to { repository.getAllSuppliersList() },
-            "cheques" to { repository.getAllChequesList() }
-        )
 
-        tables.forEach { (tableName, dataProvider) ->
-            try {
-                val data = dataProvider()
-                if (data.isNotEmpty()) {
-                    client.postgrest[tableName].upsert(data)
-                }
-            } catch (e: Exception) {
-                Log.e("Sync", "Silent sync failed for table '$tableName': ${e.message}")
-            }
-        }
+        // Sync Products
+        try {
+            val products = repository.allProducts.first()
+            if (products.isNotEmpty()) client.postgrest["products"].upsert(products)
+        } catch (e: Exception) { Log.e("Sync", "Silent sync failed for products: ${e.message}") }
+
+        // Sync Customers
+        try {
+            val customers = repository.allCustomers.first()
+            if (customers.isNotEmpty()) client.postgrest["customers"].upsert(customers)
+        } catch (e: Exception) { Log.e("Sync", "Silent sync failed for customers: ${e.message}") }
+
+        // Sync Invoices
+        try {
+            val invoices = repository.allInvoices.first().map { it.invoice }
+            if (invoices.isNotEmpty()) client.postgrest["invoices"].upsert(invoices)
+        } catch (e: Exception) { Log.e("Sync", "Silent sync failed for invoices: ${e.message}") }
+
+        // Sync Invoice Items
+        try {
+            val invoiceItems = repository.allInvoiceItems.first()
+            if (invoiceItems.isNotEmpty()) client.postgrest["invoice_items"].upsert(invoiceItems)
+        } catch (e: Exception) { Log.e("Sync", "Silent sync failed for invoice_items: ${e.message}") }
+
+        // Sync Transactions
+        try {
+            val transactions = repository.getAllTransactionsList()
+            if (transactions.isNotEmpty()) client.postgrest["debt_transactions"].upsert(transactions)
+        } catch (e: Exception) { Log.e("Sync", "Silent sync failed for transactions: ${e.message}") }
+
+        // Sync Expenses
+        try {
+            val expenses = repository.getAllExpensesList()
+            if (expenses.isNotEmpty()) client.postgrest["expenses"].upsert(expenses)
+        } catch (e: Exception) { Log.e("Sync", "Silent sync failed for expenses: ${e.message}") }
+
+        // Sync Suppliers
+        try {
+            val suppliers = repository.getAllSuppliersList()
+            if (suppliers.isNotEmpty()) client.postgrest["suppliers"].upsert(suppliers)
+        } catch (e: Exception) { Log.e("Sync", "Silent sync failed for suppliers: ${e.message}") }
+
+        // Sync Checks
+        try {
+            val cheques = repository.getAllChequesList()
+            if (cheques.isNotEmpty()) client.postgrest["cheques"].upsert(cheques)
+        } catch (e: Exception) { Log.e("Sync", "Silent sync failed for cheques: ${e.message}") }
     }
 
     @Suppress("unused")

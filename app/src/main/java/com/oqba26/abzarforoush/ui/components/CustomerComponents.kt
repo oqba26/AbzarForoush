@@ -101,9 +101,11 @@ fun CustomerItemCard(
                     Column {
                         Text(
                             text = customer.name, 
-                            style = MaterialTheme.typography.titleLarge, 
+                            style = MaterialTheme.typography.titleMedium, 
                             fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                         )
                         customer.phoneNumber?.let {
                             Text(

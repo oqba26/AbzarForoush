@@ -120,14 +120,22 @@ fun CartSheetContent(
             Row(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
                 FilterChip(
                     selected = !isPurchaseMode,
-                    onClick = { isPurchaseMode = false },
+                    onClick = { 
+                        isPurchaseMode = false
+                        onCustomerSelected(selectedCustomerId)
+                        onSupplierSelected(null)
+                    },
                     label = { Text("فروش به مشتری") },
                     modifier = Modifier.weight(1f)
                 )
                 Spacer(Modifier.width(8.dp))
                 FilterChip(
                     selected = isPurchaseMode,
-                    onClick = { isPurchaseMode = true },
+                    onClick = { 
+                        isPurchaseMode = true
+                        onCustomerSelected(null)
+                        onSupplierSelected(selectedSupplierId)
+                    },
                     label = { Text("خرید از تامین‌کننده") },
                     modifier = Modifier.weight(1f)
                 )
@@ -216,8 +224,8 @@ fun CartSheetContent(
                         val discount = totalDiscountText.cleanNumber().toDoubleOrNull() ?: 0.0
                         val paid = amountPaidText.cleanNumber().toDoubleOrNull() ?: 0.0
                         onCheckout(
-                            selectedCustomerId,
-                            selectedSupplierId,
+                            if (!isPurchaseMode) selectedCustomerId else null,
+                            if (isPurchaseMode) selectedSupplierId else null,
                             paid,
                             discount,
                             manualCustomerName,

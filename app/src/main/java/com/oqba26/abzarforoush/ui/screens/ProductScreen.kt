@@ -263,7 +263,7 @@ fun ProductScreen(
                 initialCustomerId = selectedCustomerId,
                 initialSupplierId = selectedSupplierId,
                 isPurchaseModeInitial = isPurchaseMode,
-                showTypeToggle = (selectedCustomerId == null && selectedSupplierId == null),
+                showTypeToggle = false,
                 onRemove = { viewModel.removeFromCart(it) },
                 onUpdatePrice = { item, price -> viewModel.updateCartItemPrice(item, price) },
                 onUpdateQuantity = { item, qty -> viewModel.updateCartItemQuantity(item, qty) },

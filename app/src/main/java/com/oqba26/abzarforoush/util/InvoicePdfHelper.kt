@@ -52,10 +52,13 @@ object InvoicePdfHelper {
         var currentY = 50f
 
         // Header / Shop Info
+        val isPurchase = invoiceWithItems.invoice.type == com.oqba26.abzarforoush.data.InvoiceType.PURCHASE
+        val defaultTitle = if (isPurchase) "فاکتور خرید ابزارفروشی" else "فاکتور فروش ابزارفروشی"
+        
         if (shopName.isNotBlank()) {
             canvas.drawText(shopName, pageWidth / 2, currentY, titlePaint)
         } else {
-            canvas.drawText("فاکتور فروش ابزارفروشی", pageWidth / 2, currentY, titlePaint)
+            canvas.drawText(defaultTitle, pageWidth / 2, currentY, titlePaint)
         }
         currentY += 30f
         
