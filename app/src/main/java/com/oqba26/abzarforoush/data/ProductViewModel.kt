@@ -452,32 +452,28 @@ class ProductViewModel(private val repository: ProductRepository) : ViewModel() 
 
     private suspend fun silentSync() {
         val client = SupabaseManager.getClient() ?: return
-        try {
-            val products = repository.allProducts.first()
-            client.postgrest["products"].upsert(products)
-            
-            val customers = repository.allCustomers.first()
-            client.postgrest["customers"].upsert(customers)
-            
-            val invoices = repository.allInvoices.first().map { it.invoice }
-            client.postgrest["invoices"].upsert(invoices)
-            
-            val invoiceItems = repository.allInvoiceItems.first()
-            client.postgrest["invoice_items"].upsert(invoiceItems)
-            
-            val transactions = repository.getAllTransactionsList()
-            client.postgrest["debt_transactions"].upsert(transactions)
+        
+        // Sync each table independently so one failure doesn't block others
+        val tables = listOf<Pair<String, suspend () -> List<Any>>>(
+            "products" to { repository.allProducts.first() },
+            "customers" to { repository.allCustomers.first() },
+            "invoices" to { repository.allInvoices.first().map { it.invoice } },
+            "invoice_items" to { repository.allInvoiceItems.first() },
+            "debt_transactions" to { repository.getAllTransactionsList() },
+            "expenses" to { repository.getAllExpensesList() },
+            "suppliers" to { repository.getAllSuppliersList() },
+            "cheques" to { repository.getAllChequesList() }
+        )
 
-            val expenses = repository.getAllExpensesList()
-            client.postgrest["expenses"].upsert(expenses)
-
-            val suppliers = repository.getAllSuppliersList()
-            client.postgrest["suppliers"].upsert(suppliers)
-
-            val cheques = repository.getAllChequesList()
-            client.postgrest["cheques"].upsert(cheques)
-        } catch (e: Exception) {
-            Log.d("Sync", "Silent sync failed: ${e.message}")
+        tables.forEach { (tableName, dataProvider) ->
+            try {
+                val data = dataProvider()
+                if (data.isNotEmpty()) {
+                    client.postgrest[tableName].upsert(data)
+                }
+            } catch (e: Exception) {
+                Log.e("Sync", "Silent sync failed for table '$tableName': ${e.message}")
+            }
         }
     }
 
@@ -759,53 +755,38 @@ class ProductViewModel(private val repository: ProductRepository) : ViewModel() 
     fun syncWithSupabase(onComplete: () -> Unit = {}) {
         viewModelScope.launch {
             val client = SupabaseManager.getClient() ?: return@launch
-            try {
-                val remoteProducts = client.postgrest["products"].select().decodeList<Product>()
-                remoteProducts.forEach { product ->
-                    launch { repository.insert(product) }
-                }
+            
+            val syncTasks = listOf<Pair<String, suspend (List<Any>) -> Unit>>(
+                "products" to { list -> list.filterIsInstance<Product>().forEach { repository.insert(it) } },
+                "customers" to { list -> list.filterIsInstance<Customer>().forEach { repository.insertCustomer(it) } },
+                "invoices" to { list -> list.filterIsInstance<Invoice>().forEach { repository.insertInvoiceRaw(it) } },
+                "invoice_items" to { list -> repository.insertInvoiceItemsRaw(list.filterIsInstance<InvoiceItem>()) },
+                "debt_transactions" to { list -> list.filterIsInstance<DebtTransaction>().forEach { repository.insertTransactionRaw(it) } },
+                "expenses" to { list -> list.filterIsInstance<Expense>().forEach { repository.insertExpense(it) } },
+                "suppliers" to { list -> list.filterIsInstance<Supplier>().forEach { repository.insertSupplier(it) } },
+                "cheques" to { list -> list.filterIsInstance<Cheque>().forEach { repository.insertCheque(it) } }
+            )
 
-                val remoteCustomers = client.postgrest["customers"].select().decodeList<Customer>()
-                remoteCustomers.forEach { customer ->
-                    launch { repository.insertCustomer(customer) }
+            syncTasks.forEach { (tableName, inserter) ->
+                try {
+                    // This is a bit tricky with generic types in Kotlin, but since we know the types...
+                    when (tableName) {
+                        "products" -> client.postgrest[tableName].select().decodeList<Product>().let { inserter(it) }
+                        "customers" -> client.postgrest[tableName].select().decodeList<Customer>().let { inserter(it) }
+                        "invoices" -> client.postgrest[tableName].select().decodeList<Invoice>().let { inserter(it) }
+                        "invoice_items" -> client.postgrest[tableName].select().decodeList<InvoiceItem>().let { inserter(it) }
+                        "debt_transactions" -> client.postgrest[tableName].select().decodeList<DebtTransaction>().let { inserter(it) }
+                        "expenses" -> client.postgrest[tableName].select().decodeList<Expense>().let { inserter(it) }
+                        "suppliers" -> client.postgrest[tableName].select().decodeList<Supplier>().let { inserter(it) }
+                        "cheques" -> client.postgrest[tableName].select().decodeList<Cheque>().let { inserter(it) }
+                    }
+                } catch (e: Exception) {
+                    Log.e("Sync", "Manual sync failed for table '$tableName': ${e.message}")
                 }
-                
-                val remoteInvoices = client.postgrest["invoices"].select().decodeList<Invoice>()
-                remoteInvoices.forEach { invoice ->
-                    launch { repository.insertInvoiceRaw(invoice) }
-                }
-                
-                val remoteItems = client.postgrest["invoice_items"].select().decodeList<InvoiceItem>()
-                repository.insertInvoiceItemsRaw(remoteItems)
-                
-                val remoteTransactions = client.postgrest["debt_transactions"].select().decodeList<DebtTransaction>()
-                remoteTransactions.forEach { transaction ->
-                    launch { repository.insertTransactionRaw(transaction) }
-                }
-                
-                val remoteExpenses = client.postgrest["expenses"].select().decodeList<Expense>()
-                remoteExpenses.forEach { expense ->
-                    launch { repository.insertExpense(expense) }
-                }
-
-                val remoteSuppliers = client.postgrest["suppliers"].select().decodeList<Supplier>()
-                remoteSuppliers.forEach { supplier ->
-                    launch { repository.insertSupplier(supplier) }
-                }
-
-                val remoteCheques = client.postgrest["cheques"].select().decodeList<Cheque>()
-                remoteCheques.forEach { cheque ->
-                    launch { repository.insertCheque(cheque) }
-                }
-
-                launch { silentSync() }
-                
-                Log.d("Sync", "Full bidirectional sync completed")
-            } catch (e: Exception) {
-                Log.e("Sync", "Manual sync failed", e)
-            } finally {
-                onComplete()
             }
+
+            launch { silentSync() }
+            onComplete()
         }
     }
 
