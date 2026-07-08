@@ -156,7 +156,8 @@ class MainActivity : ComponentActivity() {
                         onDismiss = { updateInfo = null },
                         onConfirm = {
                             updateManager.downloadAndInstall(info.url, "AbzarForoush_v${info.versionName}.apk")
-                            if (!info.isForceUpdate) updateInfo = null
+                            // بلافاصله دیالوگ را می‌بندیم تا تجربه کاربری بهتری داشته باشیم
+                            updateInfo = null
                         }
                     )
                 }

@@ -15,7 +15,6 @@ import androidx.core.content.FileProvider
 import androidx.core.net.toUri
 import io.ktor.client.*
 import io.ktor.client.statement.bodyAsText
-import io.ktor.client.call.*
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.client.request.*
 import io.ktor.serialization.kotlinx.json.*
@@ -38,14 +37,14 @@ class UpdateManager(private val context: Context) {
 
     private val updateUrl = "https://raw.githubusercontent.com/oqba26/AbzarForoush/main/update.json"
 
+    private val json = Json {
+        ignoreUnknownKeys = true
+        coerceInputValues = true
+    }
+
     private val client = HttpClient {
         install(ContentNegotiation) {
-            json(
-                Json {
-                    ignoreUnknownKeys = true
-                    coerceInputValues = true
-                }
-            )
+            json(json)
         }
     }
 
@@ -63,10 +62,7 @@ class UpdateManager(private val context: Context) {
             
             // Fetch as String first to avoid Content-Type issues with GitHub Raw
             val responseText: String = client.get(urlWithParams).bodyAsText()
-            val updateInfo: UpdateInfo = Json { 
-                ignoreUnknownKeys = true 
-                coerceInputValues = true
-            }.decodeFromString(responseText)
+            val updateInfo: UpdateInfo = json.decodeFromString(responseText)
 
             android.util.Log.d("UpdateManager", "Server version: ${updateInfo.versionCode}")
             
@@ -90,6 +86,16 @@ class UpdateManager(private val context: Context) {
     }
 
     fun downloadAndInstall(url: String, fileName: String) {
+        if (!context.packageManager.canRequestPackageInstalls()) {
+            Toast.makeText(context, "لطفاً برای نصب آپدیت، اجازه نصب برنامه‌های ناشناخته را بدهید", Toast.LENGTH_LONG).show()
+            val intent = Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
+                data = "package:${context.packageName}".toUri()
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            }
+            context.startActivity(intent)
+            return
+        }
+
         Toast.makeText(context, "در حال شروع دانلود به‌روزرسانی...", Toast.LENGTH_SHORT).show()
         val downloadManager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
         val uri = url.toUri()
@@ -109,33 +115,28 @@ class UpdateManager(private val context: Context) {
         val downloadId = downloadManager.enqueue(request)
 
         val onComplete = object : BroadcastReceiver() {
-            override fun onReceive(context: Context, intent: Intent) {
+            override fun onReceive(receiverContext: Context, intent: Intent) {
                 val id = intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1L)
                 if (id == downloadId) {
                     installApk(fileName)
-                    context.unregisterReceiver(this)
+                    try {
+                        receiverContext.unregisterReceiver(this)
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    }
                 }
             }
         }
         
         val filter = IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE)
-        ContextCompat.registerReceiver(context, onComplete, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
+        // Use RECEIVER_EXPORTED for system broadcasts like DownloadManager.ACTION_DOWNLOAD_COMPLETE
+        ContextCompat.registerReceiver(context, onComplete, filter, ContextCompat.RECEIVER_EXPORTED)
     }
 
     private fun installApk(fileName: String) {
         val apkFile = File(context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), fileName)
         if (!apkFile.exists()) {
             Toast.makeText(context, "فایل نصب پیدا نشد!", Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        if (!context.packageManager.canRequestPackageInstalls()) {
-            Toast.makeText(context, "لطفاً اجازه نصب برنامه را صادر کنید", Toast.LENGTH_LONG).show()
-            val intent = Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
-                data = "package:${context.packageName}".toUri()
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK
-            }
-            context.startActivity(intent)
             return
         }
 

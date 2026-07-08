@@ -18,7 +18,7 @@ data class DebtTransaction(
     val customerId: Int? = null,
     val supplierId: Int? = null,
     val invoiceId: Int? = null,
-    val amount: Double,
+    val amount: Double = 0.0,
     val description: String? = null,
     val timestamp: Long = System.currentTimeMillis(),
     val dueDate: Long? = null,

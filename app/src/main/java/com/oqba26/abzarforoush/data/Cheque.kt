@@ -25,8 +25,8 @@ data class Cheque(
     val id: Int = 0,
     val chequeNumber: String,
     val bankName: String,
-    val amount: Double,
-    val dueDate: Long,
+    val amount: Double = 0.0,
+    val dueDate: Long = 0L,
     val personName: String, // نام مشتری یا تامین‌کننده
     val type: ChequeType,
     val status: ChequeStatus = ChequeStatus.PENDING,

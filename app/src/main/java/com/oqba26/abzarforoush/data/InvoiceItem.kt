@@ -11,9 +11,9 @@ data class InvoiceItem(
     val id: Int = 0,
     val invoiceId: Int,
     val productName: String,
-    val quantity: Double,
+    val quantity: Double = 0.0,
     val unit: String = "عدد",
-    val priceAtSale: Double,
+    val priceAtSale: Double = 0.0,
     val purchasePriceAtSale: Double = 0.0,
     val discount: Double = 0.0
 )

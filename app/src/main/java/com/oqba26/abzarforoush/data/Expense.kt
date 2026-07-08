@@ -21,7 +21,7 @@ enum class ExpenseCategory {
 data class Expense(
     @PrimaryKey(autoGenerate = true)
     val id: Int = 0,
-    val amount: Double,
+    val amount: Double = 0.0,
     val category: ExpenseCategory,
     val description: String? = null,
     val timestamp: Long = System.currentTimeMillis()

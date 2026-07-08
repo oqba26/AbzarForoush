@@ -27,8 +27,8 @@ android {
         applicationId = "com.oqba26.abzarforoush"
         minSdk = 26
         targetSdk = 35
-        versionCode = 9
-        versionName = "1.2.8"
+        versionCode = 10
+        versionName = "1.1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

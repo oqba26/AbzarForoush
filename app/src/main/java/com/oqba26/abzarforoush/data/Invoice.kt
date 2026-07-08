@@ -16,7 +16,7 @@ data class Invoice(
     val id: Int = 0,
     val timestamp: Long = System.currentTimeMillis(),
     val type: InvoiceType = InvoiceType.SALE,
-    val totalAmount: Double,
+    val totalAmount: Double = 0.0,
     val totalDiscount: Double = 0.0,
     val customerId: Int? = null,
     val supplierId: Int? = null,
