@@ -14,6 +14,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.core.net.toUri
 import io.ktor.client.*
+import io.ktor.client.statement.bodyAsText
 import io.ktor.client.call.*
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.client.request.*
@@ -59,7 +60,14 @@ class UpdateManager(private val context: Context) {
             val urlWithParams = if (updateUrl.contains("?")) "$updateUrl&t=$timestamp" else "$updateUrl?t=$timestamp"
             
             android.util.Log.d("UpdateManager", "Checking for update at: $urlWithParams")
-            val updateInfo: UpdateInfo = client.get(urlWithParams).body()
+            
+            // Fetch as String first to avoid Content-Type issues with GitHub Raw
+            val responseText: String = client.get(urlWithParams).bodyAsText()
+            val updateInfo: UpdateInfo = Json { 
+                ignoreUnknownKeys = true 
+                coerceInputValues = true
+            }.decodeFromString(responseText)
+
             android.util.Log.d("UpdateManager", "Server version: ${updateInfo.versionCode}")
             
             val pInfo = context.packageManager.getPackageInfo(context.packageName, 0)
