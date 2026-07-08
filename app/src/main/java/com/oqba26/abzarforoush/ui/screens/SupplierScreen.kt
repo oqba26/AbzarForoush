@@ -156,6 +156,24 @@ fun SupplierDialog(
     var phone by remember { mutableStateOf(supplier?.phoneNumber ?: "") }
     var address by remember { mutableStateOf(supplier?.address ?: "") }
 
+    val context = androidx.compose.ui.platform.LocalContext.current
+    
+    // Auto-fill phone number from contacts if name matches
+    LaunchedEffect(name) {
+        if (name.length > 2 && phone.isBlank()) {
+            if (androidx.core.content.ContextCompat.checkSelfPermission(
+                    context,
+                    android.Manifest.permission.READ_CONTACTS
+                ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+            ) {
+                val foundPhone = com.oqba26.abzarforoush.util.ContactHelper.getPhoneNumberByName(context, name)
+                if (foundPhone != null) {
+                    phone = foundPhone
+                }
+            }
+        }
+    }
+
     Dialog(onDismissRequest = onDismiss) {
         CompositionLocalProvider(LocalLayoutDirection provides androidx.compose.ui.unit.LayoutDirection.Rtl) {
             Surface(

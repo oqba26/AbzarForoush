@@ -1,6 +1,6 @@
 {
-  "versionCode": 8,
-  "versionName": "1.2.7",
+  "versionCode": 9,
+  "versionName": "1.2.8",
   "url": "https://github.com/oqba26/AbzarForoush/releases/download/v1.2.7/AbzarForoush-v1.2.7.apk",
   "releaseNotes": "• رفع مشکل اساسی در سیستم آپدیت خودکار\n• رفع باگ عدم همگام‌سازی فیلد محصولات با سوپابیس\n• بهبود پایداری در ارسال داده‌ها",
   "isForceUpdate": true

@@ -95,6 +95,23 @@ fun CartSheetContent(
             }
         }
     }
+
+    val context = androidx.compose.ui.platform.LocalContext.current
+    // Auto-fill phone number from contacts if name matches (for new customers)
+    LaunchedEffect(manualCustomerName) {
+        if (manualCustomerName.length > 2 && manualCustomerPhone.isBlank() && !isPurchaseMode) {
+            if (androidx.core.content.ContextCompat.checkSelfPermission(
+                    context,
+                    android.Manifest.permission.READ_CONTACTS
+                ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+            ) {
+                val foundPhone = com.oqba26.abzarforoush.util.ContactHelper.getPhoneNumberByName(context, manualCustomerName)
+                if (foundPhone != null) {
+                    manualCustomerPhone = foundPhone
+                }
+            }
+        }
+    }
     var amountPaidText by remember { mutableStateOf("") }
     var expanded by remember { mutableStateOf(false) }
     var dueDate by remember { mutableStateOf<Long?>(null) }
