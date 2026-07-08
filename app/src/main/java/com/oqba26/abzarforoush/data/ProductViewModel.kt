@@ -456,14 +456,22 @@ class ProductViewModel(private val repository: ProductRepository) : ViewModel() 
         // Sync Products
         try {
             val products = repository.allProducts.first()
-            if (products.isNotEmpty()) client.postgrest["products"].upsert(products)
-        } catch (e: Exception) { Log.e("Sync", "Silent sync failed for products: ${e.message}") }
+            if (products.isNotEmpty()) {
+                client.postgrest["products"].upsert(products)
+                Log.d("Sync", "Products synced successfully")
+            }
+        } catch (e: Exception) { 
+            Log.e("Sync", "Products sync failed: ${e.message}")
+        }
 
         // Sync Customers
         try {
             val customers = repository.allCustomers.first()
-            if (customers.isNotEmpty()) client.postgrest["customers"].upsert(customers)
-        } catch (e: Exception) { Log.e("Sync", "Silent sync failed for customers: ${e.message}") }
+            if (customers.isNotEmpty()) {
+                client.postgrest["customers"].upsert(customers)
+                Log.d("Sync", "Customers synced successfully")
+            }
+        } catch (e: Exception) { Log.e("Sync", "Customers sync failed: ${e.message}") }
 
         // Sync Invoices
         try {

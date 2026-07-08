@@ -1,7 +1,7 @@
 {
-  "versionCode": 6,
-  "versionName": "1.2.5",
-  "url": "https://github.com/oqba26/AbzarForoush/releases/download/v1.2.5/AbzarForoush-v1.2.5.apk",
+  "versionCode": 7,
+  "versionName": "1.2.6",
+  "url": "https://github.com/oqba26/AbzarForoush/releases/download/v1.2.5/AbzarForoush-v1.2.6.apk",
   "releaseNotes": "• رفع مشکل همگام‌سازی لحظه‌ای (Real-time)\n• بهبود مدیریت بدهی و سوابق مشتریان\n• نمایش گردش کالا و سابقه قیمت در کارت محصول\n• بهینه‌سازی رابط کاربری سبد خرید",
   "isForceUpdate": true
 }
