@@ -51,7 +51,8 @@ import com.oqba26.abzarforoush.ui.components.EditCustomerDialog
 @Composable
 fun CustomerScreen(
     viewModel: ProductViewModel,
-    onNavigateBack: () -> Unit
+    onNavigateBack: () -> Unit,
+    onNavigateToDetail: (Long) -> Unit
 ) {
     val customers by viewModel.allCustomers.collectAsState()
     var isRefreshing by remember { mutableStateOf(false) }
@@ -191,7 +192,8 @@ fun CustomerScreen(
                             onNewInvoice = {
                                 viewModel.selectCustomerForCart(customer.id)
                                 onNavigateBack()
-                            }
+                            },
+                            onViewDetails = { onNavigateToDetail(customer.id) }
                         )
                     }
                 }

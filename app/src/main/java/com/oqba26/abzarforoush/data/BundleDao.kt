@@ -15,6 +15,12 @@ interface BundleDao {
     @Query("SELECT * FROM bundles")
     fun getAllBundles(): Flow<List<BundleWithProducts>>
 
+    @Query("SELECT * FROM bundles")
+    suspend fun getAllBundlesList(): List<Bundle>
+
+    @Query("SELECT * FROM bundle_items")
+    suspend fun getAllBundleItemsList(): List<BundleItem>
+
     @Delete
     suspend fun deleteBundle(bundle: Bundle)
 }

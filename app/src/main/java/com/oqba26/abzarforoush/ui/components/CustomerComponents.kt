@@ -6,8 +6,6 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -24,7 +22,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.oqba26.abzarforoush.data.Customer
 import com.oqba26.abzarforoush.data.CustomerType
@@ -39,7 +36,8 @@ fun CustomerItemCard(
     onSettleDebt: (Double) -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
-    onNewInvoice: () -> Unit
+    onNewInvoice: () -> Unit,
+    onViewDetails: () -> Unit
 ) {
     var isExpanded by remember { mutableStateOf(false) }
     var showSettleDialog by remember { mutableStateOf(false) }
@@ -74,7 +72,7 @@ fun CustomerItemCard(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 12.dp, vertical = 6.dp)
-            .clickable { isExpanded = !isExpanded },
+            .clickable { onViewDetails() },
         elevation = CardDefaults.cardElevation(defaultElevation = if (isExpanded) 6.dp else 2.dp),
         colors = CardDefaults.cardColors(
             containerColor = if (isExpanded) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f) else MaterialTheme.colorScheme.surface

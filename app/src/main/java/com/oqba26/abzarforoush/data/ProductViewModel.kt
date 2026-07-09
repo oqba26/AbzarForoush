@@ -30,6 +30,7 @@ import io.github.jan.supabase.realtime.PostgresAction
 import io.github.jan.supabase.realtime.channel
 import io.github.jan.supabase.realtime.decodeRecord
 import io.github.jan.supabase.realtime.postgresChangeFlow
+import kotlin.time.Duration.Companion.milliseconds
 
 class ProductViewModel(private val repository: ProductRepository) : ViewModel() {
 
@@ -166,13 +167,8 @@ class ProductViewModel(private val repository: ProductRepository) : ViewModel() 
     fun deleteExpense(expense: Expense) {
         viewModelScope.launch {
             repository.deleteExpense(expense)
-            launch {
-                try {
-                    SupabaseManager.getClient()?.postgrest?.from("expenses")?.delete {
-                        filter { Expense::id eq expense.id }
-                    }
-                } catch (_: Exception) {}
-            }
+            repository.addPendingDeletion("expenses", expense.id.toString())
+            launch { silentSync() }
         }
     }
 
@@ -193,13 +189,8 @@ class ProductViewModel(private val repository: ProductRepository) : ViewModel() 
     fun deleteSupplier(supplier: Supplier) {
         viewModelScope.launch {
             repository.deleteSupplier(supplier)
-            launch {
-                try {
-                    SupabaseManager.getClient()?.postgrest?.from("suppliers")?.delete {
-                        filter { Supplier::id eq supplier.id }
-                    }
-                } catch (_: Exception) {}
-            }
+            repository.addPendingDeletion("suppliers", supplier.id.toString())
+            launch { silentSync() }
         }
     }
 
@@ -220,13 +211,8 @@ class ProductViewModel(private val repository: ProductRepository) : ViewModel() 
     fun deleteCheque(cheque: Cheque) {
         viewModelScope.launch {
             repository.deleteCheque(cheque)
-            launch {
-                try {
-                    SupabaseManager.getClient()?.postgrest?.from("cheques")?.delete {
-                        filter { Cheque::id eq cheque.id }
-                    }
-                } catch (_: Exception) {}
-            }
+            repository.addPendingDeletion("cheques", cheque.id.toString())
+            launch { silentSync() }
         }
     }
 
@@ -237,21 +223,21 @@ class ProductViewModel(private val repository: ProductRepository) : ViewModel() 
     private val _cartItems = MutableStateFlow<List<CartItem>>(emptyList())
     val cartItems = _cartItems.asStateFlow()
 
-    private val _selectedCustomerIdForCart = MutableStateFlow<Int?>(null)
+    private val _selectedCustomerIdForCart = MutableStateFlow<Long?>(null)
     val selectedCustomerIdForCart = _selectedCustomerIdForCart.asStateFlow()
 
-    private val _selectedSupplierIdForCart = MutableStateFlow<Int?>(null)
+    private val _selectedSupplierIdForCart = MutableStateFlow<Long?>(null)
     val selectedSupplierIdForCart = _selectedSupplierIdForCart.asStateFlow()
 
     private val _isPurchaseMode = MutableStateFlow(false)
     val isPurchaseMode = _isPurchaseMode.asStateFlow()
 
-    fun selectCustomerForCart(customerId: Int?) {
+    fun selectCustomerForCart(customerId: Long?) {
         _selectedCustomerIdForCart.value = customerId
         if (customerId != null) _isPurchaseMode.value = false
     }
 
-    fun selectSupplierForCart(supplierId: Int?) {
+    fun selectSupplierForCart(supplierId: Long?) {
         _selectedSupplierIdForCart.value = supplierId
         if (supplierId != null) _isPurchaseMode.value = true
     }
@@ -338,8 +324,8 @@ class ProductViewModel(private val repository: ProductRepository) : ViewModel() 
     }
 
     fun checkout(
-        customerId: Int? = null,
-        supplierId: Int? = null,
+        customerId: Long? = null,
+        supplierId: Long? = null,
         amountPaid: Double = 0.0, 
         totalDiscount: Double = 0.0, 
         dueDate: Long? = null,
@@ -393,6 +379,9 @@ class ProductViewModel(private val repository: ProductRepository) : ViewModel() 
     fun deleteBundle(bundle: Bundle) {
         viewModelScope.launch {
             repository.deleteBundle(bundle)
+            repository.addPendingDeletion("bundles", bundle.id.toString())
+            repository.addPendingDeletion("bundle_items", bundle.id.toString(), "bundleId")
+            launch { silentSync() }
         }
     }
 
@@ -406,13 +395,8 @@ class ProductViewModel(private val repository: ProductRepository) : ViewModel() 
     fun deleteProduct(product: Product) {
         viewModelScope.launch {
             repository.delete(product)
-            launch {
-                try {
-                    SupabaseManager.getClient()?.postgrest?.from("products")?.delete {
-                        filter { Product::id eq product.id }
-                    }
-                } catch (_: Exception) {}
-            }
+            repository.addPendingDeletion("products", product.id.toString())
+            launch { silentSync() }
         }
     }
 
@@ -433,17 +417,12 @@ class ProductViewModel(private val repository: ProductRepository) : ViewModel() 
     fun deleteCustomer(customer: Customer) {
         viewModelScope.launch {
             repository.deleteCustomer(customer)
-            launch {
-                try {
-                    SupabaseManager.getClient()?.postgrest?.from("customers")?.delete {
-                        filter { Customer::id eq customer.id }
-                    }
-                } catch (_: Exception) {}
-            }
+            repository.addPendingDeletion("customers", customer.id.toString())
+            launch { silentSync() }
         }
     }
 
-    fun settleCustomerDebt(customerId: Int, amount: Double, description: String? = null) {
+    fun settleCustomerDebt(customerId: Long, amount: Double, description: String? = null) {
         viewModelScope.launch {
             repository.settleCustomerDebt(customerId, amount, description)
             launch { silentSync() }
@@ -508,10 +487,36 @@ class ProductViewModel(private val repository: ProductRepository) : ViewModel() 
             val cheques = repository.getAllChequesList()
             if (cheques.isNotEmpty()) client.postgrest["cheques"].upsert(cheques)
         } catch (e: Exception) { Log.e("Sync", "Silent sync failed for cheques: ${e.message}") }
+
+        // Sync Bundles
+        try {
+            val bundles = repository.getAllBundlesList()
+            if (bundles.isNotEmpty()) client.postgrest["bundles"].upsert(bundles)
+            
+            val bundleItems = repository.getAllBundleItemsList()
+            if (bundleItems.isNotEmpty()) client.postgrest["bundle_items"].upsert(bundleItems)
+            Log.d("Sync", "Bundles synced successfully")
+        } catch (e: Exception) { Log.e("Sync", "Bundles sync failed: ${e.message}") }
+
+        // Process Pending Deletions
+        try {
+            val pendingDeletions = repository.getPendingDeletions()
+            pendingDeletions.forEach { deletion ->
+                try {
+                    client.postgrest[deletion.tableName].delete {
+                        filter { eq(deletion.identifierColumn, deletion.identifier) }
+                    }
+                    repository.removePendingDeletion(deletion)
+                    Log.d("Sync", "Processed pending deletion for ${deletion.tableName}")
+                } catch (e: Exception) {
+                    Log.e("Sync", "Failed to process pending deletion: ${e.message}")
+                }
+            }
+        } catch (e: Exception) { Log.e("Sync", "Pending deletions process failed: ${e.message}") }
     }
 
     @Suppress("unused")
-    fun getDebtTransactions(customerId: Int): Flow<List<DebtTransaction>> {
+    fun getDebtTransactions(customerId: Long): Flow<List<DebtTransaction>> {
         return repository.getDebtTransactions(customerId)
     }
 
@@ -737,7 +742,7 @@ class ProductViewModel(private val repository: ProductRepository) : ViewModel() 
             }
             launch {
                 channel.postgresChangeFlow<PostgresAction.Delete>(schema = "public") { table = "customers" }.collect { 
-                    val id = it.oldRecord["id"]?.toString()?.toIntOrNull()
+                    val id = it.oldRecord["id"]?.toString()?.toLongOrNull()
                     if (id != null) {
                         repository.allCustomers.first().find { c -> c.id == id }?.let { cust ->
                             repository.deleteCustomer(cust)
@@ -783,6 +788,24 @@ class ProductViewModel(private val repository: ProductRepository) : ViewModel() 
 
     init {
         listenToRealtimeChanges()
+        // به محض اجرای برنامه، اگر دیتابیس خالی بود تلاش کن اطلاعات را از سرور دریافت کنی
+        checkAndPerformInitialSync()
+    }
+
+    private fun checkAndPerformInitialSync() {
+        viewModelScope.launch {
+            // یک تاخیر کوتاه برای اطمینان از مقداردهی اولیه تنظیمات
+            kotlinx.coroutines.delay(1000.milliseconds)
+            
+            val products = repository.allProducts.first()
+            val customers = repository.allCustomers.first()
+            
+            // اگر دیتابیس محلی خالی بود، همگام‌سازی خودکار را شروع کن
+            if (products.isEmpty() && customers.isEmpty()) {
+                Log.d("Sync", "Local database is empty. Starting initial sync...")
+                syncWithSupabase()
+            }
+        }
     }
 
     fun syncWithSupabase(onComplete: () -> Unit = {}) {
@@ -826,14 +849,10 @@ class ProductViewModel(private val repository: ProductRepository) : ViewModel() 
     fun deleteInvoice(invoiceWithItems: InvoiceWithItems) {
         viewModelScope.launch {
             repository.deleteInvoice(invoiceWithItems)
-            launch {
-                try {
-                    val client = SupabaseManager.getClient() ?: return@launch
-                    client.postgrest["invoices"].delete { filter { Invoice::id eq invoiceWithItems.invoice.id } }
-                    client.postgrest["invoice_items"].delete { filter { InvoiceItem::invoiceId eq invoiceWithItems.invoice.id } }
-                    client.postgrest["debt_transactions"].delete { filter { DebtTransaction::invoiceId eq invoiceWithItems.invoice.id } }
-                } catch (_: Exception) {}
-            }
+            repository.addPendingDeletion("invoices", invoiceWithItems.invoice.id.toString())
+            repository.addPendingDeletion("invoice_items", invoiceWithItems.invoice.id.toString(), "invoiceId")
+            repository.addPendingDeletion("debt_transactions", invoiceWithItems.invoice.id.toString(), "invoiceId")
+            launch { silentSync() }
         }
     }
 

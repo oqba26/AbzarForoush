@@ -6,7 +6,7 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface DebtTransactionDao {
     @Query("SELECT * FROM debt_transactions WHERE customerId = :customerId ORDER BY timestamp DESC")
-    fun getTransactionsForCustomer(customerId: Int): Flow<List<DebtTransaction>>
+    fun getTransactionsForCustomer(customerId: Long): Flow<List<DebtTransaction>>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(transaction: DebtTransaction)

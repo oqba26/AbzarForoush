@@ -10,7 +10,8 @@ class ProductRepository(
     private val bundleDao: BundleDao,
     private val expenseDao: ExpenseDao,
     private val supplierDao: SupplierDao,
-    private val chequeDao: ChequeDao
+    private val chequeDao: ChequeDao,
+    private val pendingDeletionDao: PendingDeletionDao
 ) {
     val allProducts: Flow<List<Product>> = productDao.getAllProducts()
     val allInvoices: Flow<List<InvoiceWithItems>> = invoiceDao.getAllInvoices()
@@ -24,8 +25,10 @@ class ProductRepository(
     suspend fun getAllSuppliersList(): List<Supplier> = supplierDao.getAllSuppliersList()
     suspend fun getAllChequesList(): List<Cheque> = chequeDao.getAllChequesList()
     suspend fun getAllExpensesList(): List<Expense> = expenseDao.getAllExpensesList()
+    suspend fun getAllBundlesList(): List<Bundle> = bundleDao.getAllBundlesList()
+    suspend fun getAllBundleItemsList(): List<BundleItem> = bundleDao.getAllBundleItemsList()
 
-    fun getDebtTransactions(customerId: Int): Flow<List<DebtTransaction>> {
+    fun getDebtTransactions(customerId: Long): Flow<List<DebtTransaction>> {
         return debtTransactionDao.getTransactionsForCustomer(customerId)
     }
 
@@ -194,7 +197,7 @@ class ProductRepository(
         customerDao.deleteCustomer(customer)
     }
 
-    suspend fun settleCustomerDebt(customerId: Int, amount: Double, description: String? = null) {
+    suspend fun settleCustomerDebt(customerId: Long, amount: Double, description: String? = null) {
         customerDao.updateDebt(customerId, -amount)
         debtTransactionDao.insert(
             DebtTransaction(
@@ -206,7 +209,7 @@ class ProductRepository(
         )
     }
 
-    suspend fun getLastPriceForCustomer(customerId: Int, productName: String): Double? {
+    suspend fun getLastPriceForCustomer(customerId: Long, productName: String): Double? {
         return invoiceDao.getLastPriceForCustomer(customerId, productName)
     }
 
@@ -226,5 +229,16 @@ class ProductRepository(
         // But for a true restore, we just insert them as they are
         backup.invoices.forEach { invoiceDao.insertInvoice(it) }
         invoiceDao.insertInvoiceItems(backup.invoiceItems)
+    }
+
+    // --- Pending Deletions ---
+    suspend fun addPendingDeletion(tableName: String, identifier: String, column: String = "id") {
+        pendingDeletionDao.insert(PendingDeletion(tableName = tableName, identifier = identifier, identifierColumn = column))
+    }
+
+    suspend fun getPendingDeletions(): List<PendingDeletion> = pendingDeletionDao.getAll()
+
+    suspend fun removePendingDeletion(deletion: PendingDeletion) {
+        pendingDeletionDao.delete(deletion)
     }
 }

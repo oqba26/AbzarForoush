@@ -19,10 +19,15 @@ import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.client.request.*
 import io.ktor.serialization.kotlinx.json.*
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import java.io.File
+import kotlin.time.Duration.Companion.milliseconds
 
 @Serializable
 data class UpdateInfo(
@@ -85,7 +90,7 @@ class UpdateManager(private val context: Context) {
         null
     }
 
-    fun downloadAndInstall(url: String, fileName: String) {
+    fun downloadAndInstall(url: String, fileName: String): Long {
         if (!context.packageManager.canRequestPackageInstalls()) {
             Toast.makeText(context, "لطفاً برای نصب آپدیت، اجازه نصب برنامه‌های ناشناخته را بدهید", Toast.LENGTH_LONG).show()
             val intent = Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
@@ -93,7 +98,7 @@ class UpdateManager(private val context: Context) {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK
             }
             context.startActivity(intent)
-            return
+            return -1L
         }
 
         Toast.makeText(context, "در حال شروع دانلود به‌روزرسانی...", Toast.LENGTH_SHORT).show()
@@ -131,7 +136,42 @@ class UpdateManager(private val context: Context) {
         val filter = IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE)
         // Use RECEIVER_EXPORTED for system broadcasts like DownloadManager.ACTION_DOWNLOAD_COMPLETE
         ContextCompat.registerReceiver(context, onComplete, filter, ContextCompat.RECEIVER_EXPORTED)
+        
+        return downloadId
     }
+
+    fun getDownloadProgress(downloadId: Long): Flow<Float> = flow {
+        val downloadManager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+        var isDownloading = true
+        while (isDownloading) {
+            val query = DownloadManager.Query().setFilterById(downloadId)
+            val cursor = downloadManager.query(query)
+            if (cursor != null && cursor.moveToFirst()) {
+                val bytesDownloadedIndex = cursor.getColumnIndex(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR)
+                val bytesTotalIndex = cursor.getColumnIndex(DownloadManager.COLUMN_TOTAL_SIZE_BYTES)
+                val statusIndex = cursor.getColumnIndex(DownloadManager.COLUMN_STATUS)
+
+                if (bytesDownloadedIndex != -1 && bytesTotalIndex != -1 && statusIndex != -1) {
+                    val bytesDownloaded = cursor.getInt(bytesDownloadedIndex)
+                    val bytesTotal = cursor.getInt(bytesTotalIndex)
+                    val status = cursor.getInt(statusIndex)
+
+                    if (status == DownloadManager.STATUS_SUCCESSFUL || status == DownloadManager.STATUS_FAILED) {
+                        isDownloading = false
+                    }
+
+                    if (bytesTotal > 0) {
+                        emit(bytesDownloaded.toFloat() / bytesTotal.toFloat())
+                    }
+                }
+                cursor.close()
+            } else {
+                isDownloading = false
+                cursor?.close()
+            }
+            if (isDownloading) delay(500.milliseconds)
+        }
+    }.flowOn(Dispatchers.IO)
 
     private fun installApk(fileName: String) {
         val apkFile = File(context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), fileName)

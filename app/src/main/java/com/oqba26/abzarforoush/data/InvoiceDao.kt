@@ -40,10 +40,10 @@ interface InvoiceDao {
     @Query("""
         SELECT priceAtSale FROM invoice_items 
         INNER JOIN invoices ON invoice_items.invoiceId = invoices.id 
-        WHERE invoices.customerId = :customerId AND invoice_items.productName = :productName 
+        WHERE invoices.customerId = :customerId AND invoice_items.productName = :productName
         ORDER BY invoices.timestamp DESC LIMIT 1
     """)
-    suspend fun getLastPriceForCustomer(customerId: Int, productName: String): Double?
+    suspend fun getLastPriceForCustomer(customerId: Long, productName: String): Double?
 }
 
 data class InvoiceWithItems(

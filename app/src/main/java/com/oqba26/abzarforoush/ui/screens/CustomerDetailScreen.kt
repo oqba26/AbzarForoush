@@ -6,10 +6,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Call
-import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Payment
-import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -17,7 +14,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.oqba26.abzarforoush.data.Customer
 import com.oqba26.abzarforoush.data.ProductViewModel
 import com.oqba26.abzarforoush.util.toPersianDateString
 import com.oqba26.abzarforoush.util.toPersianDigits
@@ -26,7 +22,7 @@ import com.oqba26.abzarforoush.util.toPersianPrice
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CustomerDetailScreen(
-    customerId: Int,
+    customerId: Long,
     viewModel: ProductViewModel,
     onNavigateBack: () -> Unit
 ) {

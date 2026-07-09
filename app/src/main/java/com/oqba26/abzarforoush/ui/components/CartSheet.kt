@@ -60,16 +60,16 @@ fun CartSheetContent(
     cartItems: List<CartItem>,
     customers: List<Customer>,
     suppliers: List<com.oqba26.abzarforoush.data.Supplier> = emptyList(),
-    initialCustomerId: Int? = null,
-    initialSupplierId: Int? = null,
+    initialCustomerId: Long? = null,
+    initialSupplierId: Long? = null,
     isPurchaseModeInitial: Boolean = false,
     showTypeToggle: Boolean = true,
     onRemove: (CartItem) -> Unit,
     onUpdatePrice: (CartItem, Double) -> Unit,
     onUpdateQuantity: (CartItem, Double) -> Unit,
-    onCustomerSelected: (Int?) -> Unit,
-    onSupplierSelected: (Int?) -> Unit = {},
-    onCheckout: (Int?, Int?, Double, Double, String?, String?, Long?, com.oqba26.abzarforoush.data.InvoiceType) -> Unit,
+    onCustomerSelected: (Long?) -> Unit,
+    onSupplierSelected: (Long?) -> Unit = {},
+    onCheckout: (Long?, Long?, Double, Double, String?, String?, Long?, com.oqba26.abzarforoush.data.InvoiceType) -> Unit,
     suggestions: List<com.oqba26.abzarforoush.data.Product> = emptyList(),
     onAddSuggestion: (com.oqba26.abzarforoush.data.Product) -> Unit = {}
 ) {
@@ -349,7 +349,7 @@ fun CartItemCard(
 fun CustomerInfoSection(
     isPurchaseMode: Boolean,
     manualCustomerName: String,
-    onNameChange: (String, Int?, String?) -> Unit,
+    onNameChange: (String, Long?, String?) -> Unit,
     manualCustomerPhone: String,
     onPhoneChange: (String) -> Unit,
     customers: List<Customer>,
@@ -382,7 +382,7 @@ fun CustomerInfoSection(
             OutlinedTextField(
                 value = manualCustomerName,
                 onValueChange = { input ->
-                    val matchId: Int?
+                    val matchId: Long?
                     val matchPhone: String?
                     if (!isPurchaseMode) {
                         val match = customers.find { it.name == input }

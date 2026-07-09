@@ -23,6 +23,7 @@ object SupabaseManager {
             defaultSerializer = KotlinXSerializer(Json {
                 ignoreUnknownKeys = true
                 coerceInputValues = true
+                encodeDefaults = true
             })
         }.also { client = it }
     }

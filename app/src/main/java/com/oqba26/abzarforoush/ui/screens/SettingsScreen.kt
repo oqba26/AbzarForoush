@@ -1,5 +1,6 @@
 package com.oqba26.abzarforoush.ui.screens
 
+import android.widget.Toast
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -7,12 +8,14 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -24,8 +27,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.oqba26.abzarforoush.data.ProductViewModel
 import com.oqba26.abzarforoush.data.SettingsManager
 import com.oqba26.abzarforoush.util.SupabaseManager
 import io.github.jan.supabase.auth.auth
@@ -34,10 +39,12 @@ import kotlinx.coroutines.launch
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
+    viewModel: ProductViewModel,
     settingsManager: SettingsManager, 
     onNavigateBack: () -> Unit,
     onLogout: () -> Unit
 ) {
+    val context = LocalContext.current
     val selectedFont by settingsManager.selectedFont.collectAsState(initial = "Vazirmatn")
     val selectedTheme by settingsManager.selectedTheme.collectAsState(initial = "Purple")
     val isSyncEnabled by settingsManager.isSyncEnabled.collectAsState(initial = true)
@@ -287,6 +294,35 @@ fun SettingsScreen(
                         }
                     }
                 )
+            }
+
+            if (isSyncEnabled) {
+                Spacer(Modifier.height(16.dp))
+                
+                var isSyncing by remember { mutableStateOf(false) }
+                
+                OutlinedButton(
+                    onClick = {
+                        isSyncing = true
+                        viewModel.syncWithSupabase {
+                            isSyncing = false
+                            Toast.makeText(context, "اطلاعات با موفقیت به‌روزرسانی شد", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = MaterialTheme.shapes.medium,
+                    enabled = !isSyncing
+                ) {
+                    if (isSyncing) {
+                        CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                        Spacer(Modifier.width(8.dp))
+                        Text("در حال دریافت...")
+                    } else {
+                        Icon(Icons.Default.Sync, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text("همین حالا همگام‌سازی کن")
+                    }
+                }
             }
 
             Spacer(Modifier.height(24.dp))

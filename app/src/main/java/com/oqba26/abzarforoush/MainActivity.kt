@@ -29,6 +29,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -36,6 +37,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -61,6 +63,7 @@ import com.oqba26.abzarforoush.ui.screens.ReportScreen
 import com.oqba26.abzarforoush.ui.screens.SettingsScreen
 import com.oqba26.abzarforoush.ui.theme.*
 import com.oqba26.abzarforoush.util.SupabaseManager
+import io.github.jan.supabase.auth.auth
 import com.oqba26.abzarforoush.util.UpdateManager
 import com.oqba26.abzarforoush.util.UpdateInfo
 import com.oqba26.abzarforoush.ui.components.UpdateDialog
@@ -112,6 +115,7 @@ class MainActivity : ComponentActivity() {
             var showCleanupDialog by remember { mutableStateOf(value = false) }
             var showForcedExitDialog by remember { mutableStateOf(value = false) }
             var isCleanupChecked by remember { mutableStateOf(value = false) }
+            var showSessionExpiredDialog by remember { mutableStateOf(false) }
             
             val settingsManager = remember { SettingsManager(context) }
             val selectedFontName by settingsManager.selectedFont.collectAsState(initial = initialFont)
@@ -120,6 +124,8 @@ class MainActivity : ComponentActivity() {
             // بخش آپدیت
             val updateManager = remember { UpdateManager(context) }
             var updateInfo by remember { mutableStateOf<UpdateInfo?>(null) }
+            var downloadProgress by remember { mutableFloatStateOf(0f) }
+            var isDownloading by remember { mutableStateOf(false) }
 
             LaunchedEffect(Unit) {
                 kotlinx.coroutines.delay(2000.milliseconds)
@@ -155,11 +161,52 @@ class MainActivity : ComponentActivity() {
                         updateInfo = info,
                         onDismiss = { updateInfo = null },
                         onConfirm = {
-                            updateManager.downloadAndInstall(info.url, "AbzarForoush_v${info.versionName}.apk")
-                            // بلافاصله دیالوگ را می‌بندیم تا تجربه کاربری بهتری داشته باشیم
+                            val id = updateManager.downloadAndInstall(info.url, "AbzarForoush_v${info.versionName}.apk")
+                            if (id != -1L) {
+                                isDownloading = true
+                                scope.launch {
+                                    updateManager.getDownloadProgress(id).collect { progress ->
+                                        downloadProgress = progress
+                                        if (progress >= 1f) {
+                                            isDownloading = false
+                                        }
+                                    }
+                                }
+                            }
                             updateInfo = null
                         }
                     )
+                }
+
+                if (isDownloading) {
+                    Dialog(onDismissRequest = { }) {
+                        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+                            Surface(
+                                shape = MaterialTheme.shapes.extraLarge,
+                                tonalElevation = 6.dp,
+                                modifier = Modifier.fillMaxWidth().padding(16.dp)
+                            ) {
+                                Column(modifier = Modifier.padding(24.dp), horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally) {
+                                    Text(
+                                        text = "در حال دریافت به‌روزرسانی",
+                                        style = MaterialTheme.typography.titleLarge,
+                                        modifier = Modifier.padding(bottom = 16.dp)
+                                    )
+                                    LinearProgressIndicator(
+                                        progress = { downloadProgress },
+                                        modifier = Modifier.fillMaxWidth().height(8.dp),
+                                        color = MaterialTheme.colorScheme.primary,
+                                        trackColor = MaterialTheme.colorScheme.surfaceVariant,
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Text(
+                                        text = "${(downloadProgress * 100).toInt()}%",
+                                        style = MaterialTheme.typography.bodyMedium
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
 
                 if (showCleanupDialog) {
@@ -272,14 +319,23 @@ class MainActivity : ComponentActivity() {
                         database.bundleDao(),
                         database.expenseDao(),
                         database.supplierDao(),
-                        database.chequeDao()
+                        database.chequeDao(),
+                        database.pendingDeletionDao()
                     )
                     val factory = ProductViewModelFactory(repository)
                     val viewModel: ProductViewModel = viewModel(factory = factory)
 
+                    LaunchedEffect(Unit) {
+                        val client = SupabaseManager.getClient()
+                        if (isAlreadyLoggedIn && syncEnabled && (client == null || client.auth.currentSessionOrNull() == null)) {
+                            showSessionExpiredDialog = true
+                        }
+                    }
+
                     val initialScreen = if (!syncEnabled || isAlreadyLoggedIn) "products" else "login"
                     
                     var currentScreen by remember { mutableStateOf(initialScreen) }
+                    var selectedDetailCustomerId by remember { mutableStateOf<Long?>(null) }
                     
                     LaunchedEffect(currentScreen) {
                         if ((currentScreen == "products") && !isCleanupChecked) {
@@ -314,6 +370,45 @@ class MainActivity : ComponentActivity() {
                                 viewModel.importFromExcel(it, context)
                             } else {
                                 viewModel.importFromCsv(it, context)
+                            }
+                        }
+                    }
+
+                    if (showSessionExpiredDialog) {
+                        Dialog(onDismissRequest = { }) {
+                            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+                                Surface(
+                                    shape = MaterialTheme.shapes.extraLarge,
+                                    tonalElevation = 6.dp,
+                                    modifier = Modifier.fillMaxWidth().padding(16.dp)
+                                ) {
+                                    Column(modifier = Modifier.padding(24.dp)) {
+                                        Text(
+                                            text = "کاربر گرامی",
+                                            style = MaterialTheme.typography.headlineSmall,
+                                            modifier = Modifier.padding(bottom = 16.dp),
+                                            color = MaterialTheme.colorScheme.primary
+                                        )
+                                        Text(
+                                            text = "زمان ورود قبلی شما به برنامه منقضی شده و باید مجدد وارد شوید. این کار فقط برای حفظ امنیت اطلاعات خودتان ضروری است.\n\nالان به صفحه ورود منتقل می‌شوید؛ لطفاً نام کاربری و کلمه عبوری که قبلاً با آن در برنامه ثبت‌نام کرده و وارد شده‌اید را مجدداً وارد نمایید. با تشکر",
+                                            style = MaterialTheme.typography.bodyMedium
+                                        )
+                                        Spacer(modifier = Modifier.height(24.dp))
+                                        Button(
+                                            onClick = {
+                                                showSessionExpiredDialog = false
+                                                currentScreen = "login"
+                                            },
+                                            modifier = Modifier.fillMaxWidth(),
+                                            shape = MaterialTheme.shapes.small,
+                                            colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                                                containerColor = MaterialTheme.colorScheme.primary
+                                            )
+                                        ) {
+                                            Text("متوجه شدم؛ ورود مجدد", color = MaterialTheme.colorScheme.onPrimary)
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -418,6 +513,7 @@ class MainActivity : ComponentActivity() {
                                     onImportBackup = { filePickerLauncher.launch("*/*") }
                                 ) { viewModel.exportFullBackup(context) }
                                 "settings" -> SettingsScreen(
+                                    viewModel = viewModel,
                                     settingsManager = settingsManager,
                                     onNavigateBack = { currentScreen = "products" },
                                     onLogout = { currentScreen = "login" }
@@ -428,8 +524,21 @@ class MainActivity : ComponentActivity() {
                                 )
                                 "customers" -> CustomerScreen(
                                     viewModel = viewModel,
-                                    onNavigateBack = { currentScreen = "products" }
+                                    onNavigateBack = { currentScreen = "products" },
+                                    onNavigateToDetail = { id ->
+                                        selectedDetailCustomerId = id
+                                        currentScreen = "customer_detail"
+                                    }
                                 )
+                                "customer_detail" -> {
+                                    selectedDetailCustomerId?.let { id ->
+                                        com.oqba26.abzarforoush.ui.screens.CustomerDetailScreen(
+                                            customerId = id,
+                                            viewModel = viewModel,
+                                            onNavigateBack = { currentScreen = "customers" }
+                                        )
+                                    }
+                                }
                                 "reports" -> ReportScreen(
                                     viewModel = viewModel,
                                     onNavigateBack = { currentScreen = "products" }
