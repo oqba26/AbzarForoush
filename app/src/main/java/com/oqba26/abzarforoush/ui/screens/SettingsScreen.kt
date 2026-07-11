@@ -1,6 +1,7 @@
 package com.oqba26.abzarforoush.ui.screens
 
 import android.widget.Toast
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -15,6 +16,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -33,6 +35,7 @@ import androidx.compose.ui.unit.dp
 import com.oqba26.abzarforoush.data.ProductViewModel
 import com.oqba26.abzarforoush.data.SettingsManager
 import com.oqba26.abzarforoush.util.SupabaseManager
+import com.oqba26.abzarforoush.util.toPersianDigits
 import io.github.jan.supabase.auth.auth
 import kotlinx.coroutines.launch
 
@@ -58,6 +61,8 @@ fun SettingsScreen(
     var localShopAddress by remember(shopAddressPersistent) { mutableStateOf(shopAddressPersistent) }
     var localShopTaxId by remember(shopTaxIdPersistent) { mutableStateOf(shopTaxIdPersistent) }
 
+    var isShopSettingsExpanded by remember { mutableStateOf(shopNamePersistent.isBlank()) }
+
     val scope = rememberCoroutineScope()
     var fontExpanded by remember { mutableStateOf(false) }
     var themeExpanded by remember { mutableStateOf(false) }
@@ -68,7 +73,7 @@ fun SettingsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("تنظیمات") },
+                title = { Text("تنظیمات", style = MaterialTheme.typography.titleMedium) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(
@@ -93,73 +98,103 @@ fun SettingsScreen(
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
         ) {
-            Text(
-                text = "تنظیمات فروشگاه",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(bottom = 16.dp)
-            )
-
-            OutlinedTextField(
-                value = localShopName,
-                onValueChange = { localShopName = it },
-                label = { Text("نام فروشگاه") },
-                placeholder = { Text("مثلاً: ابزارآلات خالقی") },
-                modifier = Modifier.fillMaxWidth(),
-                shape = MaterialTheme.shapes.medium,
-                singleLine = true
-            )
-
-            Spacer(Modifier.height(8.dp))
-
-            OutlinedTextField(
-                value = localShopPhone,
-                onValueChange = { localShopPhone = it },
-                label = { Text("شماره تماس فروشگاه") },
-                modifier = Modifier.fillMaxWidth(),
-                shape = MaterialTheme.shapes.medium,
-                singleLine = true
-            )
-
-            Spacer(Modifier.height(8.dp))
-
-            OutlinedTextField(
-                value = localShopAddress,
-                onValueChange = { localShopAddress = it },
-                label = { Text("آدرس فروشگاه") },
-                modifier = Modifier.fillMaxWidth(),
-                shape = MaterialTheme.shapes.medium,
-                maxLines = 2
-            )
-
-            Spacer(Modifier.height(8.dp))
-
-            OutlinedTextField(
-                value = localShopTaxId,
-                onValueChange = { localShopTaxId = it },
-                label = { Text("شناسه اقتصادی / کد ملی") },
-                modifier = Modifier.fillMaxWidth(),
-                shape = MaterialTheme.shapes.medium,
-                singleLine = true
-            )
-
-            Spacer(Modifier.height(16.dp))
-
-            Button(
-                onClick = {
-                    scope.launch {
-                        settingsManager.saveShopInfo(
-                            localShopName,
-                            localShopPhone,
-                            localShopAddress,
-                            localShopTaxId
-                        )
-                    }
-                },
-                modifier = Modifier.fillMaxWidth(),
-                shape = MaterialTheme.shapes.medium
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("ذخیره مشخصات فروشگاه")
+                Text(
+                    text = "تنظیمات فروشگاه",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+                if (!isShopSettingsExpanded) {
+                    IconButton(onClick = { isShopSettingsExpanded = true }) {
+                        Icon(Icons.Default.Edit, contentDescription = "Edit Shop Info", tint = MaterialTheme.colorScheme.primary)
+                    }
+                }
+            }
+
+            if (!isShopSettingsExpanded) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                    shape = MaterialTheme.shapes.medium,
+                    onClick = { isShopSettingsExpanded = true }
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text(text = localShopName.ifBlank { "نام فروشگاه تنظیم نشده" }, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        if (localShopPhone.isNotBlank()) {
+                            Text(text = "تلفن: ${localShopPhone.toPersianDigits()}", style = MaterialTheme.typography.bodySmall)
+                        }
+                        if (localShopAddress.isNotBlank()) {
+                            Text(text = "آدرس: $localShopAddress", style = MaterialTheme.typography.bodySmall, maxLines = 1)
+                        }
+                    }
+                }
+            } else {
+                OutlinedTextField(
+                    value = localShopName,
+                    onValueChange = { localShopName = it },
+                    label = { Text("نام فروشگاه") },
+                    placeholder = { Text("مثلاً: ابزارآلات مرکزی") },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = MaterialTheme.shapes.medium,
+                    singleLine = true
+                )
+
+                Spacer(Modifier.height(8.dp))
+
+                OutlinedTextField(
+                    value = localShopPhone,
+                    onValueChange = { localShopPhone = it },
+                    label = { Text("شماره تماس فروشگاه") },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = MaterialTheme.shapes.medium,
+                    singleLine = true
+                )
+
+                Spacer(Modifier.height(8.dp))
+
+                OutlinedTextField(
+                    value = localShopAddress,
+                    onValueChange = { localShopAddress = it },
+                    label = { Text("آدرس فروشگاه") },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = MaterialTheme.shapes.medium,
+                    maxLines = 2
+                )
+
+                Spacer(Modifier.height(8.dp))
+
+                OutlinedTextField(
+                    value = localShopTaxId,
+                    onValueChange = { localShopTaxId = it },
+                    label = { Text("شناسه اقتصادی / کد ملی") },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = MaterialTheme.shapes.medium,
+                    singleLine = true
+                )
+
+                Spacer(Modifier.height(16.dp))
+
+                Button(
+                    onClick = {
+                        scope.launch {
+                            settingsManager.saveShopInfo(
+                                localShopName,
+                                localShopPhone,
+                                localShopAddress,
+                                localShopTaxId
+                            )
+                            isShopSettingsExpanded = false
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = MaterialTheme.shapes.medium
+                ) {
+                    Text("ذخیره مشخصات فروشگاه")
+                }
             }
 
             Spacer(Modifier.height(32.dp))

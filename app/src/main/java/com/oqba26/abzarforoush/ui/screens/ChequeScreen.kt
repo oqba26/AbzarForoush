@@ -9,6 +9,9 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AccountBalance
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -28,6 +31,7 @@ import com.oqba26.abzarforoush.util.cleanNumber
 import com.oqba26.abzarforoush.util.toPersianDateString
 import com.oqba26.abzarforoush.util.toPersianDigits
 import com.oqba26.abzarforoush.util.toPersianPrice
+import java.time.LocalDate
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -35,25 +39,82 @@ fun ChequeScreen(viewModel: ProductViewModel, onNavigateBack: () -> Unit) {
     val cheques by viewModel.allCheques.collectAsState()
     var showAddDialog by remember { mutableStateOf(false) }
     var selectedTab by remember { mutableIntStateOf(0) }
+    
+    var searchQuery by remember { mutableStateOf("") }
+    var statusFilter by remember { mutableStateOf<ChequeStatus?>(null) }
+    var dueTodayOnly by remember { mutableStateOf(false) }
+    var isSearchVisible by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("دفتر چک") },
+                title = { 
+                    if (isSearchVisible) {
+                        TextField(
+                            value = searchQuery,
+                            onValueChange = { searchQuery = it },
+                            placeholder = { Text("جستجو در چک‌ها...", color = Color.White.copy(alpha = 0.7f)) },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = TextFieldDefaults.colors(
+                                focusedContainerColor = Color.Transparent,
+                                unfocusedContainerColor = Color.Transparent,
+                                cursorColor = Color.White,
+                                focusedTextColor = Color.White,
+                                unfocusedTextColor = Color.White
+                            ),
+                            singleLine = true,
+                            trailingIcon = {
+                                IconButton(onClick = { 
+                                    searchQuery = ""
+                                    isSearchVisible = false 
+                                }) {
+                                    Icon(Icons.Default.Clear, contentDescription = null, tint = Color.White)
+                                }
+                            }
+                        )
+                    } else {
+                        Text("دفتر چک", style = MaterialTheme.typography.titleMedium)
+                    }
+                },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
                 actions = {
-                    IconButton(onClick = { showAddDialog = true }) {
-                        Icon(Icons.Default.Add, contentDescription = "Add Cheque")
+                    if (!isSearchVisible) {
+                        IconButton(onClick = { isSearchVisible = true }) {
+                            Icon(Icons.Default.Search, contentDescription = "Search")
+                        }
                     }
+                    Surface(
+                        onClick = { showAddDialog = true },
+                        color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.15f),
+                        contentColor = MaterialTheme.colorScheme.onPrimary,
+                        shape = MaterialTheme.shapes.medium
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier.padding(vertical = 4.dp, horizontal = 10.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Add,
+                                contentDescription = "Add Cheque",
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Text(
+                                text = "ثبت چک",
+                                style = MaterialTheme.typography.labelSmall
+                            )
+                        }
+                    }
+                    Spacer(Modifier.width(8.dp))
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.primary,
                     titleContentColor = MaterialTheme.colorScheme.onPrimary,
-                    navigationIconContentColor = MaterialTheme.colorScheme.onPrimary
+                    navigationIconContentColor = MaterialTheme.colorScheme.onPrimary,
+                    actionIconContentColor = MaterialTheme.colorScheme.onPrimary
                 )
             )
         }
@@ -64,8 +125,51 @@ fun ChequeScreen(viewModel: ProductViewModel, onNavigateBack: () -> Unit) {
                 Tab(selected = selectedTab == 1, onClick = { selectedTab = 1 }, text = { Text("پرداختی (تامین‌کننده)") })
             }
 
-            val filteredCheques = cheques.filter { 
-                if (selectedTab == 0) it.type == ChequeType.RECEIVABLE else it.type == ChequeType.PAYABLE 
+            // Filter Bar
+            ScrollableTabRow(
+                selectedTabIndex = if (statusFilter == null && !dueTodayOnly) 0 else -1,
+                edgePadding = 16.dp,
+                containerColor = MaterialTheme.colorScheme.surface,
+                divider = {},
+                indicator = {}
+            ) {
+                FilterChip(
+                    selected = statusFilter == null && !dueTodayOnly,
+                    onClick = { statusFilter = null; dueTodayOnly = false },
+                    label = { Text("همه") },
+                    modifier = Modifier.padding(horizontal = 4.dp)
+                )
+                FilterChip(
+                    selected = dueTodayOnly,
+                    onClick = { dueTodayOnly = !dueTodayOnly; statusFilter = null },
+                    label = { Text("سررسید امروز") },
+                    leadingIcon = { if (dueTodayOnly) Icon(Icons.Default.FilterList, null, Modifier.size(16.dp)) },
+                    modifier = Modifier.padding(horizontal = 4.dp)
+                )
+                ChequeStatus.entries.forEach { status ->
+                    FilterChip(
+                        selected = statusFilter == status,
+                        onClick = { statusFilter = if (statusFilter == status) null else status; dueTodayOnly = false },
+                        label = { Text(status.toPersian()) },
+                        modifier = Modifier.padding(horizontal = 4.dp)
+                    )
+                }
+            }
+
+            val filteredCheques = cheques.filter { cheque ->
+                val typeMatch = if (selectedTab == 0) cheque.type == ChequeType.RECEIVABLE else cheque.type == ChequeType.PAYABLE
+                val searchMatch = searchQuery.isEmpty() || 
+                        cheque.personName.contains(searchQuery, ignoreCase = true) || 
+                        cheque.chequeNumber.contains(searchQuery) ||
+                        cheque.bankName.contains(searchQuery, ignoreCase = true)
+                
+                val statusMatch = statusFilter == null || cheque.status == statusFilter
+                
+                val todayMatch = if (dueTodayOnly) {
+                    cheque.dueDate == viewModel.timeProvider.getToday()
+                } else true
+
+                typeMatch && searchMatch && statusMatch && todayMatch
             }
 
             if (filteredCheques.isEmpty()) {
@@ -88,6 +192,7 @@ fun ChequeScreen(viewModel: ProductViewModel, onNavigateBack: () -> Unit) {
 
     if (showAddDialog) {
         AddChequeDialog(
+            today = viewModel.timeProvider.getToday(),
             onDismiss = { showAddDialog = false },
             onConfirm = { num, bank, amount, date, person, type ->
                 viewModel.addCheque(num, bank, amount, date, person, type)
@@ -154,15 +259,33 @@ fun ChequeItem(cheque: Cheque, onStatusChange: (ChequeStatus) -> Unit, onDelete:
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AddChequeDialog(onDismiss: () -> Unit, onConfirm: (String, String, Double, Long, String, ChequeType) -> Unit) {
+fun AddChequeDialog(
+    today: LocalDate,
+    onDismiss: () -> Unit,
+    onConfirm: (String, String, Double, LocalDate, String, ChequeType) -> Unit
+) {
     var chequeNumber by remember { mutableStateOf("") }
     var bankName by remember { mutableStateOf("") }
     var amount by remember { mutableStateOf("") }
     var personName by remember { mutableStateOf("") }
     var type by remember { mutableStateOf(ChequeType.RECEIVABLE) }
     
-    // Simple mock date picker (in real app we'd use a proper date picker)
-    var daysFromNow by remember { mutableStateOf("30") }
+    var dueDate by remember { mutableStateOf(today) }
+    var showDatePicker by remember { mutableStateOf(false) }
+
+    if (showDatePicker) {
+        val currentMilli = dueDate.atStartOfDay(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
+        com.oqba26.abzarforoush.ui.components.ShamsiDatePicker(
+            initialTimestamp = currentMilli,
+            onDismiss = { showDatePicker = false },
+            onDateSelected = { timestamp ->
+                dueDate = java.time.Instant.ofEpochMilli(timestamp)
+                    .atZone(java.time.ZoneId.systemDefault())
+                    .toLocalDate()
+                showDatePicker = false
+            }
+        )
+    }
 
     Dialog(onDismissRequest = onDismiss) {
         CompositionLocalProvider(LocalLayoutDirection provides androidx.compose.ui.unit.LayoutDirection.Rtl) {
@@ -206,10 +329,15 @@ fun AddChequeDialog(onDismiss: () -> Unit, onConfirm: (String, String, Double, L
                             modifier = Modifier.fillMaxWidth()
                         )
                         OutlinedTextField(
-                            value = daysFromNow, 
-                            onValueChange = { daysFromNow = it.cleanNumber() }, 
-                            label = { Text("سررسید (چند روز دیگر؟)") }, 
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            value = dueDate.toPersianDateString(), 
+                            onValueChange = { }, 
+                            label = { Text("تاریخ سررسید") }, 
+                            readOnly = true,
+                            trailingIcon = {
+                                IconButton(onClick = { showDatePicker = true }) {
+                                    Icon(Icons.Default.Add, contentDescription = null)
+                                }
+                            },
                             modifier = Modifier.fillMaxWidth()
                         )
                     }
@@ -223,8 +351,6 @@ fun AddChequeDialog(onDismiss: () -> Unit, onConfirm: (String, String, Double, L
                         Button(
                             onClick = {
                                 val amt = amount.cleanNumber().toDoubleOrNull() ?: 0.0
-                                val days = daysFromNow.cleanNumber().toLongOrNull() ?: 30L
-                                val dueDate = System.currentTimeMillis() + (days * 24 * 60 * 60 * 1000L)
                                 if (chequeNumber.isNotBlank() && amt > 0) {
                                     onConfirm(chequeNumber, bankName, amt, dueDate, personName, type)
                                 }

@@ -2,6 +2,7 @@ package com.oqba26.abzarforoush.util
 
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.auth.Auth
+import io.github.jan.supabase.auth.SettingsSessionManager
 import io.github.jan.supabase.createSupabaseClient
 import io.github.jan.supabase.postgrest.Postgrest
 import io.github.jan.supabase.realtime.Realtime
@@ -18,7 +19,9 @@ object SupabaseManager {
         ) {
             install(Postgrest)
             install(Realtime)
-            install(Auth)
+            install(Auth) {
+                sessionManager = SettingsSessionManager()
+            }
             
             defaultSerializer = KotlinXSerializer(Json {
                 ignoreUnknownKeys = true

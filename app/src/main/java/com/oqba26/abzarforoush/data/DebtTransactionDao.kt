@@ -11,6 +11,9 @@ interface DebtTransactionDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(transaction: DebtTransaction)
 
+    @Update
+    suspend fun update(transaction: DebtTransaction)
+
     @Delete
     suspend fun delete(transaction: DebtTransaction)
     
@@ -19,4 +22,7 @@ interface DebtTransactionDao {
 
     @Query("SELECT * FROM debt_transactions")
     suspend fun getAllTransactionsList(): List<DebtTransaction>
+
+    @Query("SELECT * FROM debt_transactions WHERE supplierId = :supplierId ORDER BY timestamp DESC")
+    fun getTransactionsForSupplier(supplierId: Long): Flow<List<DebtTransaction>>
 }

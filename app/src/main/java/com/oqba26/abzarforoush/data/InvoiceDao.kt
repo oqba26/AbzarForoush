@@ -11,6 +11,9 @@ interface InvoiceDao {
     @Insert(onConflict = androidx.room.OnConflictStrategy.REPLACE)
     suspend fun insertInvoice(invoice: Invoice): Long
 
+    @androidx.room.Update
+    suspend fun updateInvoice(invoice: Invoice)
+
     @Insert(onConflict = androidx.room.OnConflictStrategy.REPLACE)
     suspend fun insertInvoiceItems(items: List<InvoiceItem>)
 

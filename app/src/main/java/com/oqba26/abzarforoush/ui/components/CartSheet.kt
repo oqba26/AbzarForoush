@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenuItem
@@ -36,6 +37,7 @@ import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -47,10 +49,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
 import com.oqba26.abzarforoush.data.CartItem
 import com.oqba26.abzarforoush.data.Customer
 import com.oqba26.abzarforoush.util.PersianNumberVisualTransformation
 import com.oqba26.abzarforoush.util.cleanNumber
+import com.oqba26.abzarforoush.util.toPersianDateString
 import com.oqba26.abzarforoush.util.toPersianDigits
 import com.oqba26.abzarforoush.util.toPersianPrice
 
@@ -69,7 +73,7 @@ fun CartSheetContent(
     onUpdateQuantity: (CartItem, Double) -> Unit,
     onCustomerSelected: (Long?) -> Unit,
     onSupplierSelected: (Long?) -> Unit = {},
-    onCheckout: (Long?, Long?, Double, Double, String?, String?, Long?, com.oqba26.abzarforoush.data.InvoiceType) -> Unit,
+    onCheckout: (Long?, Long?, Double, Double, String?, String?, Long?, List<Pair<Double, Long?>>?, com.oqba26.abzarforoush.data.InvoiceType) -> Unit,
     suggestions: List<com.oqba26.abzarforoush.data.Product> = emptyList(),
     onAddSuggestion: (com.oqba26.abzarforoush.data.Product) -> Unit = {}
 ) {
@@ -97,29 +101,34 @@ fun CartSheetContent(
     }
 
     val context = androidx.compose.ui.platform.LocalContext.current
-    // Auto-fill phone number from contacts if name matches (for new customers)
+    var suggestedContacts by remember { mutableStateOf<List<com.oqba26.abzarforoush.util.ContactInfo>>(emptyList()) }
+
+    // Search contacts if name matches (for new customers)
     LaunchedEffect(manualCustomerName) {
-        if (manualCustomerName.length > 2 && manualCustomerPhone.isBlank() && !isPurchaseMode) {
+        suggestedContacts = if (manualCustomerName.length > 1 && manualCustomerPhone.isBlank() && !isPurchaseMode) {
             if (androidx.core.content.ContextCompat.checkSelfPermission(
                     context,
                     android.Manifest.permission.READ_CONTACTS
                 ) == android.content.pm.PackageManager.PERMISSION_GRANTED
             ) {
-                val foundPhone = com.oqba26.abzarforoush.util.ContactHelper.getPhoneNumberByName(context, manualCustomerName)
-                if (foundPhone != null) {
-                    manualCustomerPhone = foundPhone
-                }
+                com.oqba26.abzarforoush.util.ContactHelper.getContactsByName(context, manualCustomerName)
+            } else {
+                emptyList()
             }
+        } else {
+            emptyList()
         }
     }
     var amountPaidText by remember { mutableStateOf("") }
     var expanded by remember { mutableStateOf(false) }
     var dueDate by remember { mutableStateOf<Long?>(null) }
+    var installments by remember { mutableStateOf<List<Pair<Double, Long?>>>(emptyList()) }
     
     val totalAmount = cartItems.sumOf { it.totalPrice }
     var totalDiscountText by remember { mutableStateOf("") }
     val finalAmount = totalAmount - (totalDiscountText.cleanNumber().toDoubleOrNull() ?: 0.0)
-    val isDebt = (amountPaidText.cleanNumber().toDoubleOrNull() ?: 0.0) < finalAmount && (selectedCustomerId != null || manualCustomerName.isNotBlank())
+    val remainingDebt = finalAmount - (amountPaidText.cleanNumber().toDoubleOrNull() ?: 0.0)
+    val isDebt = remainingDebt > 0 && (selectedCustomerId != null || manualCustomerName.isNotBlank())
 
     Column(
         modifier = Modifier
@@ -206,8 +215,17 @@ fun CartSheetContent(
                         totalDiscountText = totalDiscountText,
                         onTotalDiscountChange = { totalDiscountText = it },
                         isDebt = isDebt,
+                        remainingDebt = remainingDebt,
                         dueDate = dueDate,
-                        onDueDateChange = { dueDate = it }
+                        onDueDateChange = { dueDate = it },
+                        installments = installments,
+                        onInstallmentsChange = { installments = it },
+                        suggestedContacts = suggestedContacts,
+                        onContactSelected = { contact ->
+                            manualCustomerName = contact.name
+                            manualCustomerPhone = contact.phoneNumber
+                            suggestedContacts = emptyList()
+                        }
                     )
                 }
             }
@@ -248,6 +266,7 @@ fun CartSheetContent(
                             manualCustomerName,
                             manualCustomerPhone,
                             dueDate,
+                            installments,
                             if (isPurchaseMode) com.oqba26.abzarforoush.data.InvoiceType.PURCHASE else com.oqba26.abzarforoush.data.InvoiceType.SALE
                         )
                     },
@@ -361,8 +380,13 @@ fun CustomerInfoSection(
     totalDiscountText: String,
     onTotalDiscountChange: (String) -> Unit,
     isDebt: Boolean,
+    remainingDebt: Double,
     dueDate: Long?,
-    onDueDateChange: (Long?) -> Unit
+    onDueDateChange: (Long?) -> Unit,
+    installments: List<Pair<Double, Long?>>,
+    onInstallmentsChange: (List<Pair<Double, Long?>>) -> Unit,
+    suggestedContacts: List<com.oqba26.abzarforoush.util.ContactInfo> = emptyList(),
+    onContactSelected: (com.oqba26.abzarforoush.util.ContactInfo) -> Unit = {}
 ) {
     Column(modifier = Modifier.padding(top = 16.dp)) {
         HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
@@ -436,6 +460,32 @@ fun CustomerInfoSection(
             }
         }
 
+        if (suggestedContacts.isNotEmpty()) {
+            Text(
+                text = "یافت شده در مخاطبین گوشی:",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(top = 4.dp)
+            )
+            androidx.compose.foundation.lazy.LazyRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+            ) {
+                items(suggestedContacts.size) { index ->
+                    val contact = suggestedContacts[index]
+                    androidx.compose.material3.SuggestionChip(
+                        onClick = { onContactSelected(contact) },
+                        label = {
+                            Column {
+                                Text(contact.name, style = MaterialTheme.typography.labelSmall)
+                                Text(contact.phoneNumber.toPersianDigits(), style = MaterialTheme.typography.labelSmall, color = androidx.compose.ui.graphics.Color.Gray)
+                            }
+                        }
+                    )
+                }
+            }
+        }
+
         OutlinedTextField(
             value = manualCustomerPhone.toPersianDigits(),
             onValueChange = { onPhoneChange(it.cleanNumber()) },
@@ -463,7 +513,7 @@ fun CustomerInfoSection(
         )
 
         if (isDebt) {
-            DebtSection(dueDate, onDueDateChange)
+            InstallmentSection(remainingDebt, dueDate, onDueDateChange, installments, onInstallmentsChange)
         }
     }
 }
@@ -493,25 +543,180 @@ fun SuggestionsSection(suggestions: List<com.oqba26.abzarforoush.data.Product>, 
 }
 
 @Composable
-fun DebtSection(dueDate: Long?, onDueDateChange: (Long?) -> Unit) {
+fun InstallmentSection(
+    remainingDebt: Double,
+    dueDate: Long?,
+    onDueDateChange: (Long?) -> Unit,
+    installments: List<Pair<Double, Long?>>,
+    onInstallmentsChange: (List<Pair<Double, Long?>>) -> Unit
+) {
+    var showInstallmentDialog by remember { mutableStateOf(false) }
+    var showDatePickerForIndex by remember { mutableStateOf<Int?>(null) } // -1 for main dueDate, >=0 for installments
+
     Column(modifier = Modifier.padding(top = 12.dp)) {
-        Text("تاریخ سررسید بدهی", style = MaterialTheme.typography.labelMedium)
         Row(
-            modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            listOf(
-                "۷ روزه" to (7L * 24 * 60 * 60 * 1000),
-                "۱۵ روزه" to (15L * 24 * 60 * 60 * 1000),
-                "۳۰ روزه" to (30L * 24 * 60 * 60 * 1000)
-            ).forEach { (label, duration) ->
-                val targetDate = System.currentTimeMillis() + duration
-                FilterChip(
-                    selected = dueDate == targetDate,
-                    onClick = { onDueDateChange(if (dueDate == targetDate) null else targetDate) },
-                    label = { Text(label) }
-                )
+            Text("مدیریت پرداخت و اقساط", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+            TextButton(onClick = { showInstallmentDialog = true }) {
+                Icon(Icons.Default.Add, null, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(4.dp))
+                Text("افزودن قسط")
             }
         }
+
+        // Main Due Date (if no installments or as the primary one)
+        Card(
+            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)),
+            onClick = { showDatePickerForIndex = -1 }
+        ) {
+            Row(
+                modifier = Modifier.padding(12.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text("موعد نهایی تسویه", style = MaterialTheme.typography.labelSmall)
+                    Text(
+                        text = dueDate?.toPersianDateString() ?: "انتخاب تاریخ",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                Icon(Icons.Default.Add, null, tint = MaterialTheme.colorScheme.primary)
+            }
+        }
+
+        // Installments List
+        installments.forEachIndexed { index, pair ->
+            Card(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.2f))
+            ) {
+                Row(
+                    modifier = Modifier.padding(12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("قسط ${index + 1}", style = MaterialTheme.typography.labelSmall)
+                        Text(pair.first.toPersianPrice(), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                    }
+                    Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("تاریخ سررسید", style = MaterialTheme.typography.labelSmall)
+                        TextButton(onClick = { showDatePickerForIndex = index }) {
+                            Text(pair.second?.toPersianDateString() ?: "انتخاب")
+                        }
+                    }
+                    IconButton(onClick = { 
+                        val newList = installments.toMutableList()
+                        newList.removeAt(index)
+                        onInstallmentsChange(newList)
+                    }) {
+                        Icon(Icons.Default.Delete, null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(20.dp))
+                    }
+                }
+            }
+        }
+
+        if (showInstallmentDialog) {
+            AddInstallmentDialog(
+                remainingDebt = remainingDebt - installments.sumOf { it.first },
+                onDismiss = { showInstallmentDialog = false },
+                onConfirm = { amount, date ->
+                    onInstallmentsChange(installments + (amount to date))
+                    showInstallmentDialog = false
+                }
+            )
+        }
+
+        showDatePickerForIndex?.let { index ->
+            ShamsiDatePicker(
+                initialTimestamp = if (index == -1) dueDate else installments.getOrNull(index)?.second,
+                onDismiss = { showDatePickerForIndex = null },
+                onDateSelected = { timestamp ->
+                    if (index == -1) {
+                        onDueDateChange(timestamp)
+                    } else {
+                        val newList = installments.toMutableList()
+                        newList[index] = newList[index].first to timestamp
+                        onInstallmentsChange(newList)
+                    }
+                    showDatePickerForIndex = null
+                }
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun AddInstallmentDialog(
+    remainingDebt: Double,
+    onDismiss: () -> Unit,
+    onConfirm: (Double, Long?) -> Unit
+) {
+    var amountText by remember { mutableStateOf(if (remainingDebt > 0) remainingDebt.toLong().toString() else "") }
+    var dueDate by remember { mutableStateOf<Long?>(null) }
+    var showDatePicker by remember { mutableStateOf(false) }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            shape = MaterialTheme.shapes.extraLarge,
+            tonalElevation = 6.dp,
+            modifier = Modifier.fillMaxWidth().padding(16.dp)
+        ) {
+            Column(modifier = Modifier.padding(24.dp)) {
+                Text("افزودن قسط جدید", style = MaterialTheme.typography.titleLarge)
+                Spacer(Modifier.height(16.dp))
+                OutlinedTextField(
+                    value = amountText,
+                    onValueChange = { amountText = it.cleanNumber() },
+                    label = { Text("مبلغ قسط (تومان)") },
+                    modifier = Modifier.fillMaxWidth(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    visualTransformation = PersianNumberVisualTransformation()
+                )
+                Spacer(Modifier.height(12.dp))
+                OutlinedTextField(
+                    value = dueDate?.toPersianDateString() ?: "",
+                    onValueChange = { },
+                    label = { Text("تاریخ سررسید") },
+                    modifier = Modifier.fillMaxWidth(),
+                    readOnly = true,
+                    trailingIcon = {
+                        IconButton(onClick = { showDatePicker = true }) {
+                            Icon(Icons.Default.Add, null)
+                        }
+                    }
+                )
+                
+                Spacer(Modifier.height(24.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        onClick = { 
+                            val amt = amountText.cleanNumber().toDoubleOrNull() ?: 0.0
+                            if (amt > 0) onConfirm(amt, dueDate) 
+                        },
+                        modifier = Modifier.weight(1f)
+                    ) { Text("تایید") }
+                    Button(onClick = onDismiss, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)) { Text("انصراف") }
+                }
+            }
+        }
+    }
+    
+    if (showDatePicker) {
+        ShamsiDatePicker(
+            initialTimestamp = dueDate,
+            onDismiss = { showDatePicker = false },
+            onDateSelected = { 
+                dueDate = it
+                showDatePicker = false
+            }
+        )
     }
 }

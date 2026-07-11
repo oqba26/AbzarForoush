@@ -1,5 +1,9 @@
 package com.oqba26.abzarforoush
 
+import android.Manifest
+import android.content.Context
+import android.content.pm.PackageManager
+import androidx.core.content.ContextCompat
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
@@ -28,18 +32,23 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
@@ -64,9 +73,11 @@ import com.oqba26.abzarforoush.ui.screens.SettingsScreen
 import com.oqba26.abzarforoush.ui.theme.*
 import com.oqba26.abzarforoush.util.SupabaseManager
 import io.github.jan.supabase.auth.auth
+import io.github.jan.supabase.auth.status.SessionStatus
 import com.oqba26.abzarforoush.util.UpdateManager
 import com.oqba26.abzarforoush.util.UpdateInfo
 import com.oqba26.abzarforoush.ui.components.UpdateDialog
+import com.oqba26.abzarforoush.util.RealTimeProvider
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -106,6 +117,10 @@ class MainActivity : ComponentActivity() {
         }
 
         enableEdgeToEdge()
+        
+        com.oqba26.abzarforoush.util.NotificationHelper.createNotificationChannel(this)
+        scheduleInstallmentReminders(this)
+
         setContent {
             val context = LocalContext.current
             val scope = rememberCoroutineScope()
@@ -116,6 +131,31 @@ class MainActivity : ComponentActivity() {
             var showForcedExitDialog by remember { mutableStateOf(value = false) }
             var isCleanupChecked by remember { mutableStateOf(value = false) }
             var showSessionExpiredDialog by remember { mutableStateOf(false) }
+            var showPermissionsDialog by remember { mutableStateOf(false) }
+            
+            val requiredPermissions = mutableListOf(
+                Manifest.permission.READ_CONTACTS,
+                Manifest.permission.CAMERA
+            ).apply {
+                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+                    add(Manifest.permission.READ_EXTERNAL_STORAGE)
+                    add(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                }
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    add(Manifest.permission.POST_NOTIFICATIONS)
+                }
+            }.toTypedArray()
+
+            val permissionLauncher = rememberLauncherForActivityResult(
+                ActivityResultContracts.RequestMultiplePermissions()
+            ) { permissions ->
+                val allGranted = permissions.entries.all { it.value }
+                if (allGranted) {
+                    showPermissionsDialog = false
+                }
+            }
+
+
             
             val settingsManager = remember { SettingsManager(context) }
             val selectedFontName by settingsManager.selectedFont.collectAsState(initial = initialFont)
@@ -224,18 +264,19 @@ class MainActivity : ComponentActivity() {
                             ) {
                                 Column(modifier = Modifier.padding(24.dp)) {
                                     Text(
-                                        text = "دسترسی لازم",
+                                        text = "دسترسی مدیریت فایل‌ها",
                                         style = MaterialTheme.typography.headlineSmall,
                                         modifier = Modifier.padding(bottom = 16.dp),
+                                        color = MaterialTheme.colorScheme.error
                                     )
                                     Text(
-                                        text = "کاربر گرامی برای اینکه برنامه کارایی داشته باشد حتما باید دسترسی زیر را به برنامه بدهید.",
+                                        text = "برای انجام عملیات پشتیبان‌گیری، بازگردانی اطلاعات و مدیریت فایل‌های نصب، برنامه به دسترسی «مدیریت تمامی فایل‌ها» نیاز دارد.\n\nبدون این دسترسی، امکان ذخیره اطلاعات شما وجود نخواهد داشت. لطفاً در صفحه بعد این دسترسی را فعال کنید.",
                                         style = MaterialTheme.typography.bodyMedium
                                     )
                                     Spacer(modifier = Modifier.height(24.dp))
                                     Row(
                                         modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        horizontalArrangement = Arrangement.spacedBy(12.dp)
                                     ) {
                                         Button(
                                             onClick = {
@@ -246,26 +287,26 @@ class MainActivity : ComponentActivity() {
                                                     context.startActivity(intent)
                                                 }
                                             },
-                                            modifier = Modifier.weight(1f),
-                                            shape = MaterialTheme.shapes.small,
-                                            colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                                            modifier = Modifier.weight(1f).height(48.dp),
+                                            shape = MaterialTheme.shapes.medium,
+                                            colors = ButtonDefaults.buttonColors(
                                                 containerColor = MaterialTheme.colorScheme.primary
                                             )
                                         ) {
-                                            Text("تایید", color = MaterialTheme.colorScheme.onPrimary)
+                                            Text("تنظیمات دسترسی", color = MaterialTheme.colorScheme.onPrimary, style = MaterialTheme.typography.labelLarge)
                                         }
                                         Button(
                                             onClick = { 
                                                 showCleanupDialog = false
                                                 showForcedExitDialog = true 
                                             },
-                                            modifier = Modifier.weight(1f),
-                                            colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                                            modifier = Modifier.weight(1f).height(48.dp),
+                                            colors = ButtonDefaults.buttonColors(
                                                 containerColor = MaterialTheme.colorScheme.error
                                             ),
-                                            shape = MaterialTheme.shapes.small
+                                            shape = MaterialTheme.shapes.medium
                                         ) {
-                                            Text("خیر", color = MaterialTheme.colorScheme.onError)
+                                            Text("خروج از برنامه", color = MaterialTheme.colorScheme.onError, style = MaterialTheme.typography.labelLarge)
                                         }
                                     }
                                 }
@@ -297,7 +338,7 @@ class MainActivity : ComponentActivity() {
                                         onClick = { finish() },
                                         modifier = Modifier.fillMaxWidth(),
                                         shape = MaterialTheme.shapes.small,
-                                        colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                                        colors = ButtonDefaults.buttonColors(
                                             containerColor = MaterialTheme.colorScheme.primary
                                         )
                                     ) {
@@ -310,35 +351,75 @@ class MainActivity : ComponentActivity() {
                 }
 
                 CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
-                    val database = AppDatabase.getDatabase(context)
-                    val repository = ProductRepository(
-                        database.productDao(), 
-                        database.invoiceDao(),
-                        database.customerDao(),
-                        database.debtTransactionDao(),
-                        database.bundleDao(),
-                        database.expenseDao(),
-                        database.supplierDao(),
-                        database.chequeDao(),
-                        database.pendingDeletionDao()
-                    )
-                    val factory = ProductViewModelFactory(repository)
+                    val database = remember { AppDatabase.getDatabase(context) }
+                    val repository = remember(database) {
+                        ProductRepository(
+                            database.productDao(), 
+                            database.invoiceDao(),
+                            database.customerDao(),
+                            database.debtTransactionDao(),
+                            database.bundleDao(),
+                            database.expenseDao(),
+                            database.supplierDao(),
+                            database.chequeDao(),
+                            database.pendingDeletionDao()
+                        )
+                    }
+                    val factory = remember(repository) { ProductViewModelFactory(repository, RealTimeProvider()) }
                     val viewModel: ProductViewModel = viewModel(factory = factory)
 
                     LaunchedEffect(Unit) {
                         val client = SupabaseManager.getClient()
-                        if (isAlreadyLoggedIn && syncEnabled && (client == null || client.auth.currentSessionOrNull() == null)) {
-                            showSessionExpiredDialog = true
+                        if (isAlreadyLoggedIn && syncEnabled && client != null) {
+                            client.auth.sessionStatus.collect { status ->
+                                if (status is SessionStatus.NotAuthenticated) {
+                                    showSessionExpiredDialog = true
+                                }
+                            }
                         }
                     }
 
                     val initialScreen = if (!syncEnabled || isAlreadyLoggedIn) "products" else "login"
-                    
                     var currentScreen by remember { mutableStateOf(initialScreen) }
                     var selectedDetailCustomerId by remember { mutableStateOf<Long?>(null) }
-                    
+
+                    val mainTabs = listOf("products", "customers", "reports", "accounting", "history", "settings")
+                    val pagerState = rememberPagerState(
+                        initialPage = mainTabs.indexOf(initialScreen).coerceAtLeast(0),
+                        pageCount = { mainTabs.size }
+                    )
+
+                    // Sync Pager with currentScreen changes (Programmatic Navigation)
                     LaunchedEffect(currentScreen) {
-                        if ((currentScreen == "products") && !isCleanupChecked) {
+                        val index = mainTabs.indexOf(currentScreen)
+                        if (index != -1 && pagerState.currentPage != index) {
+                            // استفاده از animateScrollToPage برای حرکت نرم
+                            pagerState.animateScrollToPage(index)
+                        }
+                    }
+
+                    // Sync currentScreen with Pager swipes (User Interaction)
+                    // استفاده از snapshotFlow و settledPage برای جلوگیری از تداخل در حین کشیدن صفحه
+                    LaunchedEffect(pagerState) {
+                        androidx.compose.runtime.snapshotFlow { pagerState.settledPage }.collect { page ->
+                            val screen = mainTabs[page]
+                            if (currentScreen != screen && currentScreen in mainTabs) {
+                                currentScreen = screen
+                            }
+                        }
+                    }
+
+                    LaunchedEffect(currentScreen, showSessionExpiredDialog) {
+                        if (currentScreen != "login") {
+                            val allGranted = requiredPermissions.all {
+                                ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED
+                            }
+                            if (!allGranted) {
+                                showPermissionsDialog = true
+                            }
+                        }
+
+                        if ((currentScreen == "products") && !isCleanupChecked && !showSessionExpiredDialog) {
                             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                                 if (!Environment.isExternalStorageManager()) {
                                     showCleanupDialog = true
@@ -355,6 +436,7 @@ class MainActivity : ComponentActivity() {
                     var showCartSheet by remember { mutableStateOf(value = false) }
 
                     val cartItems by viewModel.cartItems.collectAsState()
+                    val isSyncing by viewModel.isSyncing.collectAsState()
 
                     val filePickerLauncher = rememberLauncherForActivityResult(
                         ActivityResultContracts.GetContent()
@@ -370,6 +452,53 @@ class MainActivity : ComponentActivity() {
                                 viewModel.importFromExcel(it, context)
                             } else {
                                 viewModel.importFromCsv(it, context)
+                            }
+                        }
+                    }
+
+                    if (showPermissionsDialog) {
+                        Dialog(onDismissRequest = { }) {
+                            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+                                Surface(
+                                    shape = MaterialTheme.shapes.extraLarge,
+                                    tonalElevation = 6.dp,
+                                    modifier = Modifier.fillMaxWidth().padding(16.dp)
+                                ) {
+                                    Column(modifier = Modifier.padding(24.dp)) {
+                                        Text(
+                                            text = "دسترسی‌های الزامی",
+                                            style = MaterialTheme.typography.headlineSmall,
+                                            modifier = Modifier.padding(bottom = 16.dp),
+                                            color = MaterialTheme.colorScheme.error
+                                        )
+                                        Text(
+                                            text = "کاربر گرامی، برای استفاده از برنامه باید دسترسی‌های زیر را تایید کنید:\n\n" +
+                                                    "۱. مخاطبین: برای پیدا کردن خودکار شماره مشتری\n" +
+                                                    "۲. دوربین: برای اسکن بارکد کالاها\n" +
+                                                    "۳. حافظه: برای ذخیره فاکتورها و فایل‌های پشتیبان\n\n" +
+                                                    "توجه: در صورت عدم تایید، برنامه به هیچ عنوان کار نخواهد کرد و بسته خواهد شد.",
+                                            style = MaterialTheme.typography.bodyMedium
+                                        )
+                                        Spacer(modifier = Modifier.height(24.dp))
+                                        Button(
+                                            onClick = {
+                                                permissionLauncher.launch(requiredPermissions)
+                                            },
+                                            modifier = Modifier.fillMaxWidth(),
+                                            shape = MaterialTheme.shapes.small,
+                                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                                        ) {
+                                            Text("متوجه شدم؛ اعطای دسترسی", color = MaterialTheme.colorScheme.onPrimary)
+                                        }
+                                        Spacer(modifier = Modifier.height(8.dp))
+                                        TextButton(
+                                            onClick = { finish() },
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) {
+                                            Text("خروج از برنامه", color = MaterialTheme.colorScheme.error)
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -401,7 +530,7 @@ class MainActivity : ComponentActivity() {
                                             },
                                             modifier = Modifier.fillMaxWidth(),
                                             shape = MaterialTheme.shapes.small,
-                                            colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                                            colors = ButtonDefaults.buttonColors(
                                                 containerColor = MaterialTheme.colorScheme.primary
                                             )
                                         ) {
@@ -434,27 +563,27 @@ class MainActivity : ComponentActivity() {
                                         Spacer(modifier = Modifier.height(24.dp))
                                         Row(
                                             modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                            horizontalArrangement = Arrangement.spacedBy(12.dp)
                                         ) {
                                             Button(
                                                 onClick = { finish() },
-                                                modifier = Modifier.weight(1f),
-                                                shape = MaterialTheme.shapes.small,
-                                                colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                                                modifier = Modifier.weight(1f).height(48.dp),
+                                                shape = MaterialTheme.shapes.medium,
+                                                colors = ButtonDefaults.buttonColors(
                                                     containerColor = MaterialTheme.colorScheme.primary
                                                 )
                                             ) {
-                                                Text("تایید", color = MaterialTheme.colorScheme.onPrimary)
+                                                Text("خروج", color = MaterialTheme.colorScheme.onPrimary, style = MaterialTheme.typography.labelLarge)
                                             }
                                             Button(
                                                 onClick = { showExitDialog = false },
-                                                modifier = Modifier.weight(1f),
-                                                colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                                                modifier = Modifier.weight(1f).height(48.dp),
+                                                colors = ButtonDefaults.buttonColors(
                                                     containerColor = MaterialTheme.colorScheme.error
                                                 ),
-                                                shape = MaterialTheme.shapes.small
+                                                shape = MaterialTheme.shapes.medium
                                             ) {
-                                                Text("انصراف", color = MaterialTheme.colorScheme.onError)
+                                                Text("انصراف", color = MaterialTheme.colorScheme.onError, style = MaterialTheme.typography.labelLarge)
                                             }
                                         }
                                     }
@@ -497,75 +626,102 @@ class MainActivity : ComponentActivity() {
                             }
                         }
                     ) { innerPadding ->
-                        Box(modifier = Modifier.padding(bottom = innerPadding.calculateBottomPadding())) {
-                            when (currentScreen) {
-                                "login" -> LoginScreen { 
-                                    scope.launch { settingsManager.setLoggedIn(loggedIn = true) }
-                                    currentScreen = "products" 
+                        Column(modifier = Modifier.padding(bottom = innerPadding.calculateBottomPadding())) {
+                            if (isSyncing) {
+                                LinearProgressIndicator(
+                                    modifier = Modifier.fillMaxWidth().height(2.dp),
+                                    color = MaterialTheme.colorScheme.tertiary,
+                                    trackColor = Color.Transparent
+                                )
+                            }
+                            Box(modifier = Modifier.fillMaxSize()) {
+                                when (currentScreen) {
+                                    "login" -> {
+                                        LoginScreen { 
+                                            scope.launch { settingsManager.setLoggedIn(loggedIn = true) }
+                                            currentScreen = "products" 
+                                        }
+                                    }
+                                    in mainTabs -> {
+                                        HorizontalPager(
+                                            state = pagerState,
+                                            modifier = Modifier.fillMaxSize(),
+                                            userScrollEnabled = true,
+                                            beyondViewportPageCount = 1
+                                        ) { page ->
+                                            when (mainTabs[page]) {
+                                                "products" -> ProductScreen(
+                                                    viewModel = viewModel,
+                                                    externalShowCart = showCartSheet,
+                                                    onCloseCart = { showCartSheet = false },
+                                                    onImportCsv = { filePickerLauncher.launch("text/*") },
+                                                    onImportExcel = { filePickerLauncher.launch("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet") },
+                                                    onExportExcel = { viewModel.exportToExcel(context) },
+                                                    onImportBackup = { filePickerLauncher.launch("*/*") }
+                                                ) { viewModel.exportFullBackup(context) }
+                                                "customers" -> CustomerScreen(
+                                                    viewModel = viewModel,
+                                                    onNavigateBack = { currentScreen = "products" },
+                                                    onNavigateToDetail = { id ->
+                                                        selectedDetailCustomerId = id
+                                                        currentScreen = "customer_detail"
+                                                    }
+                                                )
+                                                "reports" -> ReportScreen(
+                                                    viewModel = viewModel,
+                                                    onNavigateBack = { currentScreen = "products" }
+                                                )
+                                                "accounting" -> AccountingScreen(
+                                                    viewModel = viewModel,
+                                                    onNavigateBack = { currentScreen = "products" },
+                                                    onNavigateToSuppliers = { currentScreen = "suppliers" },
+                                                    onNavigateToCheques = { currentScreen = "cheques" },
+                                                    onNavigateToCashbook = { currentScreen = "cashbook" }
+                                                )
+                                                "history" -> HistoryScreen(
+                                                    viewModel = viewModel,
+                                                    onNavigateBack = { currentScreen = "products" }
+                                                )
+                                                "settings" -> SettingsScreen(
+                                                    viewModel = viewModel,
+                                                    settingsManager = settingsManager,
+                                                    onNavigateBack = { currentScreen = "products" },
+                                                    onLogout = { currentScreen = "login" }
+                                                )
+                                            }
+                                        }
+                                    }
+                                    else -> {
+                                        // Detail Screens
+                                        when (currentScreen) {
+                                            "customer_detail" -> {
+                                                selectedDetailCustomerId?.let { id ->
+                                                    com.oqba26.abzarforoush.ui.screens.CustomerDetailScreen(
+                                                        customerId = id,
+                                                        viewModel = viewModel,
+                                                        onNavigateBack = { currentScreen = "customers" }
+                                                    )
+                                                }
+                                            }
+                                            "suppliers" -> SupplierScreen(
+                                                viewModel = viewModel,
+                                                onNavigateBack = { currentScreen = "accounting" },
+                                                onStartPurchase = {
+                                                    currentScreen = "products"
+                                                    showCartSheet = true
+                                                }
+                                            )
+                                            "cheques" -> ChequeScreen(
+                                                viewModel = viewModel,
+                                                onNavigateBack = { currentScreen = "accounting" }
+                                            )
+                                            "cashbook" -> CashbookScreen(
+                                                viewModel = viewModel,
+                                                onNavigateBack = { currentScreen = "accounting" }
+                                            )
+                                        }
+                                    }
                                 }
-                                "products" -> ProductScreen(
-                                    viewModel = viewModel,
-                                    externalShowCart = showCartSheet,
-                                    onCloseCart = { showCartSheet = false },
-                                    onImportCsv = { filePickerLauncher.launch("text/*") },
-                                    onImportExcel = { filePickerLauncher.launch("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet") },
-                                    onExportExcel = { viewModel.exportToExcel(context) },
-                                    onImportBackup = { filePickerLauncher.launch("*/*") }
-                                ) { viewModel.exportFullBackup(context) }
-                                "settings" -> SettingsScreen(
-                                    viewModel = viewModel,
-                                    settingsManager = settingsManager,
-                                    onNavigateBack = { currentScreen = "products" },
-                                    onLogout = { currentScreen = "login" }
-                                )
-                                "history" -> HistoryScreen(
-                                    viewModel = viewModel,
-                                    onNavigateBack = { currentScreen = "products" }
-                                )
-                                "customers" -> CustomerScreen(
-                                    viewModel = viewModel,
-                                    onNavigateBack = { currentScreen = "products" },
-                                    onNavigateToDetail = { id ->
-                                        selectedDetailCustomerId = id
-                                        currentScreen = "customer_detail"
-                                    }
-                                )
-                                "customer_detail" -> {
-                                    selectedDetailCustomerId?.let { id ->
-                                        com.oqba26.abzarforoush.ui.screens.CustomerDetailScreen(
-                                            customerId = id,
-                                            viewModel = viewModel,
-                                            onNavigateBack = { currentScreen = "customers" }
-                                        )
-                                    }
-                                }
-                                "reports" -> ReportScreen(
-                                    viewModel = viewModel,
-                                    onNavigateBack = { currentScreen = "products" }
-                                )
-                                "accounting" -> AccountingScreen(
-                                    viewModel = viewModel,
-                                    onNavigateBack = { currentScreen = "products" },
-                                    onNavigateToSuppliers = { currentScreen = "suppliers" },
-                                    onNavigateToCheques = { currentScreen = "cheques" },
-                                    onNavigateToCashbook = { currentScreen = "cashbook" }
-                                )
-                                "suppliers" -> SupplierScreen(
-                                    viewModel = viewModel,
-                                    onNavigateBack = { currentScreen = "accounting" },
-                                    onStartPurchase = {
-                                        currentScreen = "products"
-                                        showCartSheet = true
-                                    }
-                                )
-                                "cheques" -> ChequeScreen(
-                                    viewModel = viewModel,
-                                    onNavigateBack = { currentScreen = "accounting" }
-                                )
-                                "cashbook" -> CashbookScreen(
-                                    viewModel = viewModel,
-                                    onNavigateBack = { currentScreen = "accounting" }
-                                )
                             }
                         }
                     }
@@ -603,5 +759,17 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    private fun scheduleInstallmentReminders(context: Context) {
+        val workRequest = androidx.work.PeriodicWorkRequestBuilder<com.oqba26.abzarforoush.util.InstallmentReminderWorker>(
+            1, java.util.concurrent.TimeUnit.DAYS
+        ).build()
+
+        androidx.work.WorkManager.getInstance(context).enqueueUniquePeriodicWork(
+            "InstallmentReminders",
+            androidx.work.ExistingPeriodicWorkPolicy.KEEP,
+            workRequest
+        )
     }
 }

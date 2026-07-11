@@ -27,7 +27,7 @@ android {
         applicationId = "com.oqba26.abzarforoush"
         minSdk = 26
         targetSdk = 35
-        versionCode = 11
+        versionCode = 13
         versionName = "1.1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -110,6 +110,8 @@ dependencies {
     implementation(libs.kotlin.csv)
     implementation(libs.sheetz)
     implementation(libs.persian.date)
+    implementation(libs.google.generativeai)
+    implementation(libs.androidx.work.runtime.ktx)
 
     testImplementation(libs.junit)
     androidTestImplementation(platform(libs.androidx.compose.bom))

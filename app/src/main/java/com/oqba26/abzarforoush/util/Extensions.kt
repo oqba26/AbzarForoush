@@ -1,6 +1,9 @@
 package com.oqba26.abzarforoush.util
 
 import java.text.NumberFormat
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
 import java.util.Locale
 import saman.zamani.persiandate.PersianDate
 import saman.zamani.persiandate.PersianDateFormat
@@ -11,8 +14,18 @@ fun Long.toPersianDateString(pattern: String = "Y/m/d"): String {
     return pDateFormat.format(pDate).toPersianDigits()
 }
 
+fun LocalDate.toPersianDateString(pattern: String = "Y/m/d"): String {
+    val epochMilli = this.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+    return epochMilli.toPersianDateString(pattern)
+}
+
 fun Long.toPersianDateTimeString(): String {
     return this.toPersianDateString("Y/m/d H:i")
+}
+
+@Suppress("unused")
+fun Instant.toPersianDateTimeString(): String {
+    return this.toEpochMilli().toPersianDateTimeString()
 }
 
 fun Double.toPersianPrice(): String {
@@ -22,7 +35,7 @@ fun Double.toPersianPrice(): String {
 
 fun Number.toPersianNumber(): String {
     val formatter = NumberFormat.getInstance(Locale("fa", "IR"))
-    return if (this is Double && this == this.toLong().toDouble()) {
+    return if (this is Double && (this == this.toLong().toDouble())) {
         formatter.format(this.toLong())
     } else {
         formatter.format(this)

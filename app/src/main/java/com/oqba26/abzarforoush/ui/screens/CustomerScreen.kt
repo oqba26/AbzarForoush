@@ -1,6 +1,8 @@
 package com.oqba26.abzarforoush.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Box
@@ -18,7 +20,6 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -139,7 +140,7 @@ fun CustomerScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("لیست مشتریان") },
+                title = { Text("لیست مشتریان", style = MaterialTheme.typography.titleMedium) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(
@@ -148,6 +149,30 @@ fun CustomerScreen(
                         )
                     }
                 },
+                actions = {
+                    Surface(
+                        onClick = { showAddDialog = true },
+                        color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.15f),
+                        contentColor = MaterialTheme.colorScheme.onPrimary,
+                        shape = MaterialTheme.shapes.medium
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier.padding(vertical = 4.dp, horizontal = 10.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Add,
+                                contentDescription = "Add Customer",
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Text(
+                                text = "افزودن مشتری",
+                                style = MaterialTheme.typography.labelSmall
+                            )
+                        }
+                    }
+                    Spacer(Modifier.width(8.dp))
+                },
                 colors = androidx.compose.material3.TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.primary,
                     titleContentColor = MaterialTheme.colorScheme.onPrimary,
@@ -155,11 +180,6 @@ fun CustomerScreen(
                     navigationIconContentColor = MaterialTheme.colorScheme.onPrimary
                 )
             )
-        },
-        floatingActionButton = {
-            FloatingActionButton(onClick = { showAddDialog = true }) {
-                Icon(Icons.Default.Add, contentDescription = "Add Customer")
-            }
         }
     ) { innerPadding ->
         PullToRefreshBox(
@@ -182,7 +202,7 @@ fun CustomerScreen(
                         .padding(innerPadding)
                         .padding(8.dp)
                 ) {
-                    items(customers) { customer ->
+                    items(customers, key = { it.id }) { customer ->
                         CustomerItemCard(
                             customer = customer,
                             viewModel = viewModel,

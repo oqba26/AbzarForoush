@@ -37,14 +37,19 @@ fun CustomerItemCard(
     onEdit: () -> Unit,
     onDelete: () -> Unit,
     onNewInvoice: () -> Unit,
-    onViewDetails: () -> Unit
+    onViewDetails: () -> Unit,
 ) {
-    var isExpanded by remember { mutableStateOf(false) }
-    var showSettleDialog by remember { mutableStateOf(false) }
+    var isExpanded by remember { mutableStateOf(value = false) }
+    var showSettleDialog by remember { mutableStateOf(value = false) }
+    
+    // بهینه‌سازی: فقط وقتی آیتم باز شد فاکتورها را پردازش می‌کنیم
     val allInvoices by viewModel.allInvoices.collectAsState()
 
-    val customerInvoices = remember(allInvoices, customer.id) {
-        allInvoices.filter { it.invoice.customerId == customer.id }.sortedByDescending { it.invoice.timestamp }
+    val customerInvoices = remember(allInvoices, customer.id, isExpanded) {
+        if (!isExpanded) emptyList()
+        else {
+            allInvoices.filter { it.invoice.customerId == customer.id }.sortedByDescending { it.invoice.timestamp }
+        }
     }
 
     val totalPurchased = customerInvoices.sumOf { it.invoice.totalAmount }
@@ -491,30 +496,33 @@ fun EditCustomerDialog(
 @Composable
 fun AddCustomerDialog(
     onDismiss: () -> Unit,
-    onConfirm: (String, String?, String?, String?, CustomerType) -> Unit
+    onConfirm: (String, String?, String?, String?, CustomerType) -> Unit,
 ) {
-    var name by remember { mutableStateOf("") }
-    var phone by remember { mutableStateOf("") }
-    var landline by remember { mutableStateOf("") }
-    var address by remember { mutableStateOf("") }
-    var type by remember { mutableStateOf(CustomerType.PERSON) }
-    var expanded by remember { mutableStateOf(false) }
+    var name by remember { mutableStateOf(value = "") }
+    var phone by remember { mutableStateOf(value = "") }
+    var landline by remember { mutableStateOf(value = "") }
+    var address by remember { mutableStateOf(value = "") }
+    var type by remember { mutableStateOf(value = CustomerType.PERSON) }
+    var expanded by remember { mutableStateOf(value = false) }
 
     val context = androidx.compose.ui.platform.LocalContext.current
 
-    // Auto-fill phone number from contacts if name matches
+    var suggestedContacts by remember { mutableStateOf<List<ContactInfo>>(emptyList()) }
+
+    // Search contacts if name matches
     LaunchedEffect(name) {
-        if (name.length > 2 && phone.isBlank()) {
+        suggestedContacts = if (name.length > 1 && phone.isBlank()) {
             if (androidx.core.content.ContextCompat.checkSelfPermission(
                     context,
                     android.Manifest.permission.READ_CONTACTS
                 ) == android.content.pm.PackageManager.PERMISSION_GRANTED
             ) {
-                val foundPhone = ContactHelper.getPhoneNumberByName(context, name)
-                if (foundPhone != null) {
-                    phone = foundPhone
-                }
+                ContactHelper.getContactsByName(context, name)
+            } else {
+                emptyList()
             }
+        } else {
+            emptyList()
         }
     }
 
@@ -574,6 +582,37 @@ fun AddCustomerDialog(
                             label = { Text("نام و نام خانوادگی / نام شرکت") },
                             modifier = Modifier.fillMaxWidth()
                         )
+
+                        if (suggestedContacts.isNotEmpty()) {
+                            Text(
+                                text = "یافت شده در مخاطبین گوشی:",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(top = 4.dp)
+                            )
+                            androidx.compose.foundation.lazy.LazyRow(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+                            ) {
+                                items(suggestedContacts.size) { index ->
+                                    val contact = suggestedContacts[index]
+                                    SuggestionChip(
+                                        onClick = {
+                                            name = contact.name
+                                            phone = contact.phoneNumber
+                                            suggestedContacts = emptyList()
+                                        },
+                                        label = {
+                                            Column {
+                                                Text(contact.name, style = MaterialTheme.typography.labelSmall)
+                                                Text(contact.phoneNumber.toPersianDigits(), style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                                            }
+                                        }
+                                    )
+                                }
+                            }
+                        }
+
                         OutlinedTextField(
                             value = phone.toPersianDigits(),
                             onValueChange = { phone = it.cleanNumber() },

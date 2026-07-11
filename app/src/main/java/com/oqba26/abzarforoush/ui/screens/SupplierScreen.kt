@@ -9,6 +9,9 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Phone
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -29,25 +32,80 @@ import com.oqba26.abzarforoush.util.toPersianPrice
 fun SupplierScreen(
     viewModel: ProductViewModel, 
     onNavigateBack: () -> Unit,
-    onStartPurchase: () -> Unit
+    onStartPurchase: () -> Unit,
 ) {
     val suppliers by viewModel.allSuppliers.collectAsState()
-    var showAddDialog by remember { mutableStateOf(false) }
+    var showAddDialog by remember { mutableStateOf(value = false) }
     var supplierToEdit by remember { mutableStateOf<Supplier?>(null) }
+    
+    var searchQuery by remember { mutableStateOf("") }
+    var onlyIndebted by remember { mutableStateOf(false) }
+    var isSearchVisible by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("مدیریت تامین‌کنندگان") },
+                title = { 
+                    if (isSearchVisible) {
+                        TextField(
+                            value = searchQuery,
+                            onValueChange = { searchQuery = it },
+                            placeholder = { Text("جستجو در تامین‌کنندگان...", color = Color.White.copy(alpha = 0.7f)) },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = TextFieldDefaults.colors(
+                                focusedContainerColor = Color.Transparent,
+                                unfocusedContainerColor = Color.Transparent,
+                                cursorColor = Color.White,
+                                focusedTextColor = Color.White,
+                                unfocusedTextColor = Color.White
+                            ),
+                            singleLine = true,
+                            trailingIcon = {
+                                IconButton(onClick = { 
+                                    searchQuery = ""
+                                    isSearchVisible = false 
+                                }) {
+                                    Icon(Icons.Default.Clear, contentDescription = null, tint = Color.White)
+                                }
+                            }
+                        )
+                    } else {
+                        Text("مدیریت تامین‌کنندگان", style = MaterialTheme.typography.titleMedium)
+                    }
+                },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
                 actions = {
-                    IconButton(onClick = { showAddDialog = true }) {
-                        Icon(Icons.Default.Add, contentDescription = "Add Supplier")
+                    if (!isSearchVisible) {
+                        IconButton(onClick = { isSearchVisible = true }) {
+                            Icon(Icons.Default.Search, contentDescription = "Search")
+                        }
                     }
+                    Surface(
+                        onClick = { showAddDialog = true },
+                        color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.15f),
+                        contentColor = MaterialTheme.colorScheme.onPrimary,
+                        shape = MaterialTheme.shapes.medium
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier.padding(vertical = 4.dp, horizontal = 10.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Add,
+                                contentDescription = "Add Supplier",
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Text(
+                                text = "تامین‌کننده",
+                                style = MaterialTheme.typography.labelSmall
+                            )
+                        }
+                    }
+                    Spacer(Modifier.width(8.dp))
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.primary,
@@ -58,23 +116,50 @@ fun SupplierScreen(
             )
         }
     ) { innerPadding ->
-        Column(modifier = Modifier.padding(innerPadding).fillMaxSize().padding(16.dp)) {
-            if (suppliers.isEmpty()) {
+        Column(modifier = Modifier.padding(innerPadding).fillMaxSize()) {
+            // Filter Bar
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                FilterChip(
+                    selected = !onlyIndebted,
+                    onClick = { onlyIndebted = false },
+                    label = { Text("همه") }
+                )
+                Spacer(Modifier.width(8.dp))
+                FilterChip(
+                    selected = onlyIndebted,
+                    onClick = { onlyIndebted = true },
+                    label = { Text("فقط بدهکاران ما") },
+                    leadingIcon = { if (onlyIndebted) Icon(Icons.Default.FilterList, null, Modifier.size(16.dp)) }
+                )
+            }
+
+            val filteredSuppliers = suppliers.filter { supplier ->
+                val searchMatch = searchQuery.isEmpty() || supplier.name.contains(searchQuery, ignoreCase = true)
+                val debtMatch = !onlyIndebted || (supplier.totalDebtToSupplier > 0)
+                searchMatch && debtMatch
+            }
+
+            if (filteredSuppliers.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("هنوز تامین‌کننده‌ای ثبت نشده است.")
+                    Text("موردی یافت نشد.")
                 }
             } else {
-                LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    items(suppliers) { supplier ->
+                LazyColumn(
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    items(filteredSuppliers) { supplier ->
                         SupplierItem(
                             supplier = supplier,
                             onEdit = { supplierToEdit = supplier },
                             onDelete = { viewModel.deleteSupplier(supplier) },
-                            onPurchase = {
-                                viewModel.selectSupplierForCart(supplier.id)
-                                onStartPurchase()
-                            }
-                        )
+                        ) {
+                            viewModel.selectSupplierForCart(supplier.id)
+                            onStartPurchase()
+                        }
                     }
                 }
             }
@@ -158,19 +243,22 @@ fun SupplierDialog(
 
     val context = androidx.compose.ui.platform.LocalContext.current
     
-    // Auto-fill phone number from contacts if name matches
+    var suggestedContacts by remember { mutableStateOf<List<com.oqba26.abzarforoush.util.ContactInfo>>(emptyList()) }
+
+    // Search contacts if name matches
     LaunchedEffect(name) {
-        if (name.length > 2 && phone.isBlank()) {
+        suggestedContacts = if (name.length > 1 && phone.isBlank()) {
             if (androidx.core.content.ContextCompat.checkSelfPermission(
                     context,
                     android.Manifest.permission.READ_CONTACTS
                 ) == android.content.pm.PackageManager.PERMISSION_GRANTED
             ) {
-                val foundPhone = com.oqba26.abzarforoush.util.ContactHelper.getPhoneNumberByName(context, name)
-                if (foundPhone != null) {
-                    phone = foundPhone
-                }
+                com.oqba26.abzarforoush.util.ContactHelper.getContactsByName(context, name)
+            } else {
+                emptyList()
             }
+        } else {
+            emptyList()
         }
     }
 
@@ -190,6 +278,37 @@ fun SupplierDialog(
 
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("نام") }, modifier = Modifier.fillMaxWidth())
+                        
+                        if (suggestedContacts.isNotEmpty()) {
+                            Text(
+                                text = "یافت شده در مخاطبین گوشی:",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(top = 4.dp)
+                            )
+                            androidx.compose.foundation.lazy.LazyRow(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+                            ) {
+                                items(suggestedContacts.size) { index ->
+                                    val contact = suggestedContacts[index]
+                                    SuggestionChip(
+                                        onClick = {
+                                            name = contact.name
+                                            phone = contact.phoneNumber
+                                            suggestedContacts = emptyList()
+                                        },
+                                        label = {
+                                            Column {
+                                                Text(contact.name, style = MaterialTheme.typography.labelSmall)
+                                                Text(contact.phoneNumber.toPersianDigits(), style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                                            }
+                                        }
+                                    )
+                                }
+                            }
+                        }
+
                         OutlinedTextField(value = phone, onValueChange = { phone = it }, label = { Text("تلفن") }, modifier = Modifier.fillMaxWidth())
                         OutlinedTextField(value = address, onValueChange = { address = it }, label = { Text("آدرس") }, modifier = Modifier.fillMaxWidth())
                     }

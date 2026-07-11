@@ -25,20 +25,108 @@ import com.oqba26.abzarforoush.util.InvoicePdfHelper
 import com.oqba26.abzarforoush.util.SupabaseManager
 import com.oqba26.abzarforoush.util.toPersianNumber
 import com.oqba26.abzarforoush.util.toPersianPrice
+import com.oqba26.abzarforoush.network.GeminiService
 import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.realtime.PostgresAction
 import io.github.jan.supabase.realtime.channel
 import io.github.jan.supabase.realtime.decodeRecord
 import io.github.jan.supabase.realtime.postgresChangeFlow
+import com.oqba26.abzarforoush.util.TimeProvider
+import java.time.LocalDate
+import java.time.ZoneOffset
 import kotlin.time.Duration.Companion.milliseconds
 
-class ProductViewModel(private val repository: ProductRepository) : ViewModel() {
+class ProductViewModel(
+    private val repository: ProductRepository,
+    val timeProvider: TimeProvider
+) : ViewModel() {
+
+    private val geminiService = GeminiService()
+
+    private val _deepAnalysisResult = MutableStateFlow<String?>(null)
+    val deepAnalysisResult = _deepAnalysisResult.asStateFlow()
+
+    private val _isAnalyzing = MutableStateFlow(false)
+    val isAnalyzing = _isAnalyzing.asStateFlow()
+
+    fun performDeepAnalysis() {
+        viewModelScope.launch {
+            _isAnalyzing.value = true
+            val prompt = prepareAnalysisPrompt()
+            _deepAnalysisResult.value = geminiService.analyzeFinancialData(prompt)
+            _isAnalyzing.value = false
+        }
+    }
+
+    fun clearAnalysisResult() {
+        _deepAnalysisResult.value = null
+    }
+
+    private fun prepareAnalysisPrompt(): String {
+        val invoices = allInvoices.value
+        val expenses = allExpenses.value
+        val cheques = allCheques.value
+        val products = allProducts.value
+        val customers = allCustomers.value
+        
+        val totalSales = invoices.sumOf { it.invoice.totalAmount }
+        val totalProfit = invoices.sumOf { it.items.sumOf { item -> (item.priceAtSale - item.purchasePriceAtSale) * item.quantity } }
+        val totalExpenses = expenses.sumOf { it.amount }
+        
+        val pendingCheques = cheques.filter { it.status == ChequeStatus.PENDING }
+        val bouncedCheques = cheques.filter { it.status == ChequeStatus.BOUNCED }
+
+        // ۱. استخراج کالاهای پرفروش
+        val topSellingProducts = invoices.flatMap { it.items }
+            .groupBy { it.productName }
+            .mapValues { it.value.sumOf { item -> item.quantity } }
+            .toList().sortedByDescending { it.second }.take(5)
+
+        // ۲. شناسایی مشتریان وفادار و الگوی خرید
+        val customerPatterns = invoices.groupBy { it.invoice.customerId }
+            .filter { it.key != null }
+            .map { entry ->
+                val customerName = customers.find { it.id == entry.key }?.name ?: "نامشخص"
+                val totalSpent = entry.value.sumOf { it.invoice.totalAmount }
+                "$customerName (${entry.value.size} فاکتور، مجموع خرید: ${totalSpent.toPersianPrice()})"
+            }.take(5)
+
+        return """
+            به عنوان یک تحلیلگر خبره و مشاور ارشد کسب و کار، این داده‌های دقیق مالی و عملیاتی فروشگاه ابزارفروشی را تحلیل کن:
+            
+            ۱. وضعیت مالی کلی:
+            - کل فروش: ${totalSales.toPersianPrice()}
+            - سود ناخالص تخمینی: ${totalProfit.toPersianPrice()}
+            - کل هزینه‌های جاری: ${totalExpenses.toPersianPrice()}
+            - مانده سود خالص: ${(totalProfit - totalExpenses).toPersianPrice()}
+            - وضعیت چک‌ها: ${pendingCheques.size.toPersianNumber()} در انتظار، ${bouncedCheques.size.toPersianNumber()} برگشتی.
+            
+            ۲. تحلیل کالاها و انبار:
+            - ۵ کالای پرفروش اخیر: ${topSellingProducts.joinToString { "${it.first} (${it.second.toPersianNumber()} عدد)" }}
+            - کالاهای در آستانه اتمام (کمتر از حد نصاب): ${products.filter { it.stock <= it.minStock }.take(5).joinToString { it.name }}
+            - تعداد کل کالاها در انبار: ${products.size.toPersianNumber()}
+            
+            ۳. تحلیل مشتریان برتر:
+            ${if (customerPatterns.isEmpty()) "هنوز اطلاعات مشتری ثبت نشده" else customerPatterns.joinToString("\n")}
+            
+            لطفاً بر اساس این داده‌ها، یک گزارش مدیریتی با بخش‌های زیر ارائه بده:
+            الف) تحلیل نقاط قوت و ضعف عملکرد مالی.
+            ب) پیش‌بینی دقیق برای خرید کالا در ماه آینده (چه کالاهایی باید شارژ شوند و چه کالاهایی رسوبی هستند).
+            ج) پیشنهاد استراتژیک برای تعامل با مشتریان وفادار جهت افزایش تکرار خرید.
+            د) ۳ پیشنهاد هوشمندانه برای افزایش حاشیه سود.
+            
+            لحن گزارش: صمیمی، حرفه‌ای، عددی و بسیار کاربردی برای صاحب مغازه باشد.
+        """.trimIndent()
+    }
 
     private val _searchQuery = MutableStateFlow("")
     val searchQuery = _searchQuery.asStateFlow()
 
     private val _selectedCategory = MutableStateFlow("همه")
     val selectedCategory = _selectedCategory.asStateFlow()
+
+    private val _isSyncing = MutableStateFlow(false)
+    val isSyncing = _isSyncing.asStateFlow()
 
     @OptIn(ExperimentalCoroutinesApi::class)
     val allProducts: StateFlow<List<Product>> = combine(
@@ -194,9 +282,19 @@ class ProductViewModel(private val repository: ProductRepository) : ViewModel() 
         }
     }
 
-    fun addCheque(chequeNumber: String, bankName: String, amount: Double, dueDate: Long, personName: String, type: ChequeType) {
+    fun addCheque(chequeNumber: String, bankName: String, amount: Double, dueDate: LocalDate, personName: String, type: ChequeType) {
         viewModelScope.launch {
-            repository.insertCheque(Cheque(chequeNumber = chequeNumber, bankName = bankName, amount = amount, dueDate = dueDate, personName = personName, type = type))
+            repository.insertCheque(
+                Cheque(
+                    chequeNumber = chequeNumber,
+                    bankName = bankName,
+                    amount = amount,
+                    dueDate = dueDate,
+                    personName = personName,
+                    type = type,
+                    timestamp = timeProvider.now().toInstant(ZoneOffset.UTC)
+                )
+            )
             launch { silentSync() }
         }
     }
@@ -329,6 +427,7 @@ class ProductViewModel(private val repository: ProductRepository) : ViewModel() 
         amountPaid: Double = 0.0, 
         totalDiscount: Double = 0.0, 
         dueDate: Long? = null,
+        installments: List<Pair<Double, Long?>>? = null,
         type: InvoiceType = InvoiceType.SALE
     ) {
         val items = _cartItems.value
@@ -356,7 +455,7 @@ class ProductViewModel(private val repository: ProductRepository) : ViewModel() 
                     discount = it.discount
                 )
             }
-            repository.saveInvoice(invoice, invoiceItems)
+            repository.saveInvoice(invoice, invoiceItems, installments)
             launch { silentSync() }
             clearCart()
         }
@@ -429,9 +528,31 @@ class ProductViewModel(private val repository: ProductRepository) : ViewModel() 
         }
     }
 
+    fun payInstallment(transaction: DebtTransaction) {
+        viewModelScope.launch {
+            repository.payInstallment(transaction)
+            launch { silentSync() }
+        }
+    }
+
+    fun revertInstallmentPayment(transaction: DebtTransaction) {
+        viewModelScope.launch {
+            repository.revertInstallmentPayment(transaction)
+            launch { silentSync() }
+        }
+    }
+
+    fun deleteInstallment(transaction: DebtTransaction) {
+        viewModelScope.launch {
+            repository.deleteInstallment(transaction)
+            repository.addPendingDeletion("debt_transactions", transaction.id.toString())
+            launch { silentSync() }
+        }
+    }
+
     private suspend fun silentSync() {
         val client = SupabaseManager.getClient() ?: return
-
+        _isSyncing.value = true
         // Sync Products
         try {
             val products = repository.allProducts.first()
@@ -513,11 +634,17 @@ class ProductViewModel(private val repository: ProductRepository) : ViewModel() 
                 }
             }
         } catch (e: Exception) { Log.e("Sync", "Pending deletions process failed: ${e.message}") }
+        _isSyncing.value = false
     }
 
     @Suppress("unused")
     fun getDebtTransactions(customerId: Long): Flow<List<DebtTransaction>> {
         return repository.getDebtTransactions(customerId)
+    }
+
+    @Suppress("unused")
+    fun getSupplierTransactions(supplierId: Long): Flow<List<DebtTransaction>> {
+        return repository.getSupplierTransactions(supplierId)
     }
 
     suspend fun getProductByBarcode(barcode: String): Product? {
@@ -605,11 +732,14 @@ class ProductViewModel(private val repository: ProductRepository) : ViewModel() 
             val phone = settings.shopPhone.first()
             val address = settings.shopAddress.first()
             val taxId = settings.shopTaxId.first()
+            val transactions = repository.getAllTransactionsList()
+            val installments = transactions.filter { it.invoiceId == invoiceWithItems.invoice.id }
             
             withContext(Dispatchers.IO) {
                 InvoicePdfHelper.generateAndShareInvoice(
                     context, 
                     invoiceWithItems,
+                    installments = installments,
                     shopName = name,
                     shopPhone = phone,
                     shopAddress = address,
@@ -619,54 +749,103 @@ class ProductViewModel(private val repository: ProductRepository) : ViewModel() 
         }
     }
 
-    // --- On-Device AI Insights (Offline Logic) ---
+    fun shareCustomerStatementAsPdf(context: Context, customer: Customer, invoices: List<InvoiceWithItems>) {
+        viewModelScope.launch {
+            val settings = SettingsManager(context)
+            val name = settings.shopName.first()
+            val phone = settings.shopPhone.first()
+            val address = settings.shopAddress.first()
+            val transactions = repository.getAllTransactionsList()
+            
+            withContext(Dispatchers.IO) {
+                InvoicePdfHelper.generateAndShareCustomerStatement(
+                    context, 
+                    customer,
+                    invoices,
+                    transactions,
+                    shopName = name,
+                    shopPhone = phone,
+                    shopAddress = address
+                )
+            }
+        }
+    }
+
+    // --- Advanced On-Device AI Insights ---
     val aiInsights: StateFlow<List<String>> = combine(
         allInvoices,
-        allInvoiceItems
-    ) { invoices, items ->
+        allInvoiceItems,
+        allProducts,
+        allCustomers
+    ) { invoices, invoiceItemsWithDetails, products, customers ->
         val insights = mutableListOf<String>()
         if (invoices.isEmpty()) return@combine listOf("هنوز فاکتوری برای تحلیل ثبت نشده است.")
 
         val now = System.currentTimeMillis()
-        
-        // 1. Seasonal Insight
-        val summerKeywords = listOf("کولر", "پمپ", "آب", "شیلنگ", "اتصالات", "فن", "پنکه", "قیر", "ایزوگام")
-        val summerSales = items.filter { item -> 
-            summerKeywords.any { it in item.productName } 
-        }.sumOf { it.quantity }
-        
-        if (summerSales > 0) {
-            insights.add("☀️ با توجه به فصل گرما، فروش ملزومات آبی و سرمایشی ${summerSales.toInt().toPersianNumber()} مورد بوده؛ پیشنهاد می‌شود موجودی این اقلام را شارژ نگه دارید.")
+        val thirtyDaysAgo = now - (30L * 24 * 60 * 60 * 1000)
+        val sixtyDaysAgo = now - (60L * 24 * 60 * 60 * 1000)
+
+        // برای دسترسی به زمان هر آیتم، باید زمان فاکتور مربوطه‌اش را پیدا کنیم
+        val itemsWithTimestamp = invoiceItemsWithDetails.mapNotNull { item ->
+            val invoice = invoices.find { it.invoice.id == item.invoiceId }
+            if (invoice != null) Pair(item, invoice.invoice.timestamp) else null
         }
 
-        // 2. Growth Analysis
+        // 1. Dead Stock Analysis (کالاهای رسوبی)
+        val soldProductNames = itemsWithTimestamp.filter { it.second > sixtyDaysAgo }.map { it.first.productName }.toSet()
+        val deadStock = products.filter { it.stock > 0 && it.name !in soldProductNames }.take(3)
+        if (deadStock.isNotEmpty()) {
+            val names = deadStock.joinToString("، ") { "«${it.name}»" }
+            insights.add("⚠️ کالاهای $names بیش از ۶۰ روز است که فروش نرفته‌اند. پیشنهاد می‌شود با تخفیف یا جابجایی در ویترین، نقدینگی خود را آزاد کنید.")
+        }
+
+        // 2. Growth Analysis (روند رشد)
         val oneWeekAgo = now - (7L * 24 * 60 * 60 * 1000)
         val twoWeeksAgo = now - (14L * 24 * 60 * 60 * 1000)
-        
         val thisWeekSales = invoices.filter { it.invoice.timestamp in oneWeekAgo..now }.sumOf { it.invoice.totalAmount }
         val lastWeekSales = invoices.filter { it.invoice.timestamp in twoWeeksAgo..oneWeekAgo }.sumOf { it.invoice.totalAmount }
         
         if (thisWeekSales > lastWeekSales && lastWeekSales > 0) {
             val growth = ((thisWeekSales - lastWeekSales) / lastWeekSales * 100).toInt()
-            insights.add("📈 روند فروش شما نسبت به هفته قبل ${growth.toPersianNumber()}% رشد داشته است. عالیه!")
+            insights.add("📈 فروش این هفته نسبت به هفته قبل ${growth.toPersianNumber()}% رشد داشته. این روند عالی را حفظ کنید!")
         }
 
-        // 3. Future Income Estimation
-        val thirtyDaysAgo = now - (30L * 24 * 60 * 60 * 1000)
+        // 3. Customer Loyalty (مشتریان وفادار)
+        val loyalCustomers = invoices.groupBy { it.invoice.customerId }
+            .filter { it.key != null && it.value.size >= 3 }
+            .mapNotNull { entry -> customers.find { it.id == entry.key }?.name }
+            .take(2)
+        if (loyalCustomers.isNotEmpty()) {
+            val names = loyalCustomers.joinToString(" و ") { "«$it»" }
+            insights.add("🏆 $names از مشتریان وفادار شما هستند. شاید بد نباشد برای خرید بعدی آن‌ها یک آفر ویژه در نظر بگیرید.")
+        }
+
+        // 4. Stock Out Prediction (پیش‌بینی اتمام موجودی)
+        val topSellingItems = itemsWithTimestamp.filter { it.second > thirtyDaysAgo }
+            .groupBy { it.first.productName }
+            .mapValues { it.value.sumOf { pair -> pair.first.quantity } }
+        
+        topSellingItems.forEach { (pName, totalQty) ->
+            val product = products.find { it.name == pName }
+            if (product != null && product.stock > 0) {
+                val dailyRate = totalQty / 30
+                if (dailyRate > 0) {
+                    val daysLeft = (product.stock / dailyRate).toInt()
+                    if (daysLeft < 7) {
+                        insights.add("🔮 هشدار اتمام موجودی: کالا «${product.name}» با سرعت فعلی فروش، حداکثر تا ${daysLeft.toPersianNumber()} روز دیگر تمام می‌شود.")
+                    }
+                }
+            }
+        }
+
+        // 5. Future Income Estimation
         val lastMonthSales = invoices.filter { it.invoice.timestamp > thirtyDaysAgo }.sumOf { it.invoice.totalAmount }
         if (lastMonthSales > 0) {
-            val dailyAvg = lastMonthSales / 30
-            val predictedMonth = dailyAvg * 30
-            insights.add("🔮 پیش‌بینی درآمد ۳۰ روز آینده: حدود ${predictedMonth.toPersianPrice()} (بر اساس میانگین فروش روزانه اخیر).")
+            val predictedMonth = (lastMonthSales / 30) * 30
+            insights.add("💰 تخمین درآمد ۳۰ روز آینده: حدود ${predictedMonth.toPersianPrice()} (بر اساس میانگین فروش روزانه اخیر).")
         }
 
-        // 4. Top Performer Insight
-        val topProduct = items.groupBy { it.productName }
-            .maxByOrNull { it.value.sumOf { i -> i.quantity } }?.key
-        topProduct?.let {
-            insights.add("🏆 کالای «$it» پرچم‌دار فروش شماست؛ شاید بد نباشد روی خرید عمده‌تر آن با قیمت کمتر مذاکره کنید.")
-        }
-
+        if (insights.isEmpty()) insights.add("💡 فروشگاه در وضعیت پایداری قرار دارد. به ثبت دقیق فاکتورها ادامه دهید تا تحلیل‌های دقیق‌تری ارائه شود.")
         insights
     }.stateIn(
         scope = viewModelScope,
@@ -810,7 +989,11 @@ class ProductViewModel(private val repository: ProductRepository) : ViewModel() 
 
     fun syncWithSupabase(onComplete: () -> Unit = {}) {
         viewModelScope.launch {
-            val client = SupabaseManager.getClient() ?: return@launch
+            _isSyncing.value = true
+            val client = SupabaseManager.getClient() ?: run {
+                _isSyncing.value = false
+                return@launch
+            }
             
             val syncTasks = listOf<Pair<String, suspend (List<Any>) -> Unit>>(
                 "products" to { list -> list.filterIsInstance<Product>().forEach { repository.insert(it) } },
@@ -841,7 +1024,8 @@ class ProductViewModel(private val repository: ProductRepository) : ViewModel() 
                 }
             }
 
-            launch { silentSync() }
+            silentSync()
+            _isSyncing.value = false
             onComplete()
         }
     }

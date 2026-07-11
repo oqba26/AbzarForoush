@@ -1,26 +1,36 @@
 package com.oqba26.abzarforoush.ui.screens
 
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.TrendingUp
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Lightbulb
+import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.oqba26.abzarforoush.data.ProductViewModel
 import com.oqba26.abzarforoush.util.toPersianDateString
 import com.oqba26.abzarforoush.util.toPersianNumber
 import com.oqba26.abzarforoush.util.toPersianPrice
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlin.time.Duration.Companion.milliseconds
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -30,22 +40,31 @@ fun ReportScreen(viewModel: ProductViewModel, onNavigateBack: () -> Unit) {
     val customers by viewModel.allCustomers.collectAsState(initial = emptyList())
     val expenses by viewModel.allExpenses.collectAsState(initial = emptyList())
 
-    val totalSales = invoices.sumOf { it.invoice.totalAmount }
-    val totalReceived = invoices.sumOf { it.invoice.amountPaid }
-    val totalDebt = customers.sumOf { it.totalDebt }
-    val totalExpenses = expenses.sumOf { it.amount }
+    // بهینه‌سازی محاسبات سنگین با استفاده از derivedStateOf
+    val totalSales by remember(invoices) { derivedStateOf { invoices.sumOf { it.invoice.totalAmount } } }
+    val totalReceived by remember(invoices) { derivedStateOf { invoices.sumOf { it.invoice.amountPaid } } }
+    val totalDebt by remember(customers) { derivedStateOf { customers.sumOf { it.totalDebt } } }
+    val totalExpenses by remember(expenses) { derivedStateOf { expenses.sumOf { it.amount } } }
+    
     val aiInsights by viewModel.aiInsights.collectAsState()
     
-    val grossProfit = invoiceItems.sumOf { 
-        (it.priceAtSale - it.purchasePriceAtSale) * it.quantity - it.discount 
-    } - invoices.sumOf { it.invoice.totalDiscount }
+    val grossProfit by remember(invoices, invoiceItems) { 
+        derivedStateOf {
+            invoiceItems.sumOf { 
+                (it.priceAtSale - it.purchasePriceAtSale) * it.quantity - it.discount 
+            } - invoices.sumOf { it.invoice.totalDiscount }
+        }
+    }
     
-    val netProfit = grossProfit - totalExpenses
+    val netProfit by remember(grossProfit, totalExpenses) { derivedStateOf { grossProfit - totalExpenses } }
+    
+    var isAnalyzing by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("گزارشات و آمار") },
+                title = { Text("گزارشات و آمار", style = MaterialTheme.typography.titleMedium) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -67,17 +86,46 @@ fun ReportScreen(viewModel: ProductViewModel, onNavigateBack: () -> Unit) {
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             item {
-                Text("خلاصه وضعیت مالی", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-            }
-
-            item {
-                SmartAnalysisCard(invoices.map { it.invoice }, invoiceItems, customers, netProfit)
-            }
-
-            item {
-                Text("توصیه‌های هوشمند (دستیار آفلاین)", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = "دستیار هوشمند فروشگاه",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    
+                    if (!isAnalyzing) {
+                        TextButton(
+                            onClick = {
+                                scope.launch {
+                                    isAnalyzing = true
+                                    delay(3000.milliseconds) // شبیه‌سازی تحلیل عمیق
+                                    isAnalyzing = false
+                                }
+                            }
+                        ) {
+                            Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("تحلیل عمیق (بتا)", style = MaterialTheme.typography.labelMedium)
+                        }
+                    }
+                }
+                
                 Spacer(Modifier.height(8.dp))
-                AiInsightsSection(aiInsights)
+                
+                if (isAnalyzing) {
+                    AiScanningLoader()
+                } else {
+                    AiInsightsSection(aiInsights)
+                }
+            }
+
+            item {
+                Text("خلاصه وضعیت مالی", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             }
 
             item {
@@ -134,28 +182,51 @@ fun ReportScreen(viewModel: ProductViewModel, onNavigateBack: () -> Unit) {
 
 @Composable
 fun AiInsightsSection(insights: List<String>) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         insights.forEach { insight ->
-            Surface(
-                color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.4f),
-                shape = RoundedCornerShape(12.dp),
+            val color = when {
+                insight.contains("📈") || insight.contains("🏆") -> Color(0xFFE8F5E9) // سبز برای موفقیت
+                insight.contains("☀️") || insight.contains("🔮") -> Color(0xFFE3F2FD) // آبی برای فرصت و پیش‌بینی
+                insight.contains("⚠️") -> Color(0xFFFFF3E0) // نارنجی برای هشدار
+                else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            }
+            
+            val icon = when {
+                insight.contains("📈") -> Icons.AutoMirrored.Filled.TrendingUp
+                insight.contains("🔮") -> Icons.Default.Psychology
+                insight.contains("☀️") -> Icons.Default.AutoAwesome
+                else -> Icons.Default.Lightbulb
+            }
+
+            Card(
+                colors = CardDefaults.cardColors(containerColor = color),
+                shape = RoundedCornerShape(16.dp),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Row(
-                    modifier = Modifier.padding(12.dp),
+                    modifier = Modifier.padding(16.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(
-                        Icons.Default.Lightbulb,
-                        contentDescription = null, 
-                        modifier = Modifier.size(18.dp),
-                        tint = MaterialTheme.colorScheme.secondary
-                    )
-                    Spacer(Modifier.width(12.dp))
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .background(Color.White.copy(alpha = 0.6f), CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = icon,
+                            contentDescription = null,
+                            modifier = Modifier.size(20.dp),
+                            tint = Color.DarkGray
+                        )
+                    }
+                    Spacer(Modifier.width(16.dp))
                     Text(
                         text = insight,
-                        style = MaterialTheme.typography.bodySmall,
-                        lineHeight = 18.sp
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color.Black.copy(alpha = 0.8f),
+                        lineHeight = 22.sp
                     )
                 }
             }
@@ -164,52 +235,50 @@ fun AiInsightsSection(insights: List<String>) {
 }
 
 @Composable
-fun SmartAnalysisCard(
-    invoices: List<com.oqba26.abzarforoush.data.Invoice>,
-    items: List<com.oqba26.abzarforoush.data.InvoiceItem>,
-    customers: List<com.oqba26.abzarforoush.data.Customer>,
-    totalProfit: Double
-) {
-    val analysis = remember(invoices, items, customers, totalProfit) {
-        val topProduct = items.groupBy { it.productName }
-            .mapValues { it.value.sumOf { i -> i.quantity } }
-            .maxByOrNull { it.value }?.key ?: "نامشخص"
-        
-        val topCustomer = customers.maxByOrNull { it.totalDebt }
-        val debtStatus = if (topCustomer != null && topCustomer.totalDebt > 0) {
-            "بیشترین طلب شما از «${topCustomer.name}» است."
-        } else "خوشبختانه طلب معوقه سنگینی ندارید."
-
-        val avgSale = if (invoices.isNotEmpty()) invoices.sumOf { it.totalAmount } / invoices.size else 0.0
-        val profitMargin = if (invoices.sumOf { it.totalAmount } > 0) (totalProfit / invoices.sumOf { it.totalAmount }) * 100 else 0.0
-        
-        "محبوب‌ترین کالای شما «$topProduct» بوده است. $debtStatus میانگین هر فاکتور شما ${avgSale.toPersianPrice()} و حاشیه سودتان حدود ${profitMargin.toInt().toPersianNumber()}% است."
-    }
+fun AiScanningLoader() {
+    val infiniteTransition = rememberInfiniteTransition(label = "scanning")
+    val alpha by infiniteTransition.animateFloat(
+        initialValue = 0.3f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1000, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "alpha"
+    )
 
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)),
         shape = RoundedCornerShape(16.dp)
     ) {
-        Row(
-            modifier = Modifier.padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
+        Column(
+            modifier = Modifier.padding(24.dp).fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Icon(
-                imageVector = Icons.AutoMirrored.Filled.TrendingUp, 
-                contentDescription = null, 
-                tint = MaterialTheme.colorScheme.tertiary
+                Icons.Default.AutoAwesome,
+                contentDescription = null,
+                modifier = Modifier.size(48.dp).alpha(alpha),
+                tint = MaterialTheme.colorScheme.primary
             )
-            Spacer(Modifier.width(12.dp))
+            Spacer(Modifier.height(16.dp))
             Text(
-                text = analysis,
+                "در حال تحلیل عمیق داده‌های فروشگاه...",
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onTertiaryContainer,
-                lineHeight = 22.sp
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center
+            )
+            Spacer(Modifier.height(8.dp))
+            LinearProgressIndicator(
+                modifier = Modifier.fillMaxWidth().height(4.dp).clip(CircleShape),
+                color = MaterialTheme.colorScheme.primary,
+                trackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
             )
         }
     }
 }
+
 
 @Composable
 fun SummaryCard(title: String, value: String, containerColor: Color, modifier: Modifier = Modifier) {

@@ -32,6 +32,10 @@ class ProductRepository(
         return debtTransactionDao.getTransactionsForCustomer(customerId)
     }
 
+    fun getSupplierTransactions(supplierId: Long): Flow<List<DebtTransaction>> {
+        return debtTransactionDao.getTransactionsForSupplier(supplierId)
+    }
+
     suspend fun getAllTransactionsList(): List<DebtTransaction> {
         return debtTransactionDao.getAllTransactionsList()
     }
@@ -105,7 +109,11 @@ class ProductRepository(
         debtTransactionDao.insert(transaction)
     }
 
-    suspend fun saveInvoice(invoice: Invoice, items: List<InvoiceItem>) {
+    suspend fun saveInvoice(
+        invoice: Invoice, 
+        items: List<InvoiceItem>, 
+        installments: List<Pair<Double, Long?>>? = null
+    ) {
         val id = invoiceDao.insertInvoice(invoice)
         val itemsWithId = items.map { it.copy(invoiceId = id.toInt()) }
         invoiceDao.insertInvoiceItems(itemsWithId)
@@ -122,36 +130,68 @@ class ProductRepository(
         // Update customer debt if applicable (only for sales)
         if (invoice.type == InvoiceType.SALE) {
             invoice.customerId?.let { cId ->
-                val debtAmount = invoice.totalAmount - invoice.amountPaid
-                if (debtAmount > 0) {
-                    customerDao.updateDebt(cId, debtAmount)
-                    debtTransactionDao.insert(
-                        DebtTransaction(
-                            customerId = cId,
-                            invoiceId = id.toInt(),
-                            amount = debtAmount,
-                            description = "بابت فاکتور فروش #${id}",
-                            dueDate = invoice.dueDate,
-                            type = TransactionType.DEBT_INCREASE
+                val totalDebt = invoice.totalAmount - invoice.amountPaid
+                if (totalDebt > 0) {
+                    customerDao.updateDebt(cId, totalDebt)
+                    
+                    if (!installments.isNullOrEmpty()) {
+                        installments.forEachIndexed { index, pair ->
+                            debtTransactionDao.insert(
+                                DebtTransaction(
+                                    customerId = cId,
+                                    invoiceId = id.toInt(),
+                                    amount = pair.first,
+                                    description = "قسط ${index + 1} فاکتور فروش #${id}",
+                                    dueDate = pair.second,
+                                    type = TransactionType.DEBT_INCREASE
+                                )
+                            )
+                        }
+                    } else {
+                        debtTransactionDao.insert(
+                            DebtTransaction(
+                                customerId = cId,
+                                invoiceId = id.toInt(),
+                                amount = totalDebt,
+                                description = "بابت فاکتور فروش #${id}",
+                                dueDate = invoice.dueDate,
+                                type = TransactionType.DEBT_INCREASE
+                            )
                         )
-                    )
+                    }
                 }
             }
         } else if (invoice.type == InvoiceType.PURCHASE) {
             invoice.supplierId?.let { sId ->
-                val debtAmount = invoice.totalAmount - invoice.amountPaid
-                if (debtAmount > 0) {
-                    supplierDao.updateDebt(sId, debtAmount)
-                    debtTransactionDao.insert(
-                        DebtTransaction(
-                            supplierId = sId,
-                            invoiceId = id.toInt(),
-                            amount = debtAmount,
-                            description = "بابت فاکتور خرید #${id}",
-                            dueDate = invoice.dueDate,
-                            type = TransactionType.DEBT_INCREASE
+                val totalDebt = invoice.totalAmount - invoice.amountPaid
+                if (totalDebt > 0) {
+                    supplierDao.updateDebt(sId, totalDebt)
+                    
+                    if (!installments.isNullOrEmpty()) {
+                        installments.forEachIndexed { index, pair ->
+                            debtTransactionDao.insert(
+                                DebtTransaction(
+                                    supplierId = sId,
+                                    invoiceId = id.toInt(),
+                                    amount = pair.first,
+                                    description = "قسط ${index + 1} فاکتور خرید #${id}",
+                                    dueDate = pair.second,
+                                    type = TransactionType.DEBT_INCREASE
+                                )
+                            )
+                        }
+                    } else {
+                        debtTransactionDao.insert(
+                            DebtTransaction(
+                                supplierId = sId,
+                                invoiceId = id.toInt(),
+                                amount = totalDebt,
+                                description = "بابت فاکتور خرید #${id}",
+                                dueDate = invoice.dueDate,
+                                type = TransactionType.DEBT_INCREASE
+                            )
                         )
-                    )
+                    }
                 }
             }
         }
@@ -207,6 +247,72 @@ class ProductRepository(
                 type = TransactionType.PAYMENT
             )
         )
+    }
+
+    suspend fun payInstallment(transaction: DebtTransaction) {
+        if (transaction.isPaid) return
+        
+        val updatedTransaction = transaction.copy(
+            isPaid = true,
+            paymentTimestamp = System.currentTimeMillis()
+        )
+        debtTransactionDao.update(updatedTransaction)
+        
+        // Reduce debt
+        if (transaction.customerId != null) {
+            customerDao.updateDebt(transaction.customerId, -transaction.amount)
+        } else if (transaction.supplierId != null) {
+            supplierDao.updateDebt(transaction.supplierId, -transaction.amount)
+        }
+
+        // Update Invoice amountPaid
+        transaction.invoiceId?.let { invId ->
+            val invoiceWithItems = invoiceDao.getInvoiceById(invId)
+            val invoice = invoiceWithItems.invoice
+            invoiceDao.updateInvoice(invoice.copy(amountPaid = invoice.amountPaid + transaction.amount))
+        }
+    }
+
+    suspend fun revertInstallmentPayment(transaction: DebtTransaction) {
+        if (!transaction.isPaid) return
+        
+        val updatedTransaction = transaction.copy(
+            isPaid = false,
+            paymentTimestamp = null
+        )
+        debtTransactionDao.update(updatedTransaction)
+        
+        // Increase debt back
+        if (transaction.customerId != null) {
+            customerDao.updateDebt(transaction.customerId, transaction.amount)
+        } else if (transaction.supplierId != null) {
+            supplierDao.updateDebt(transaction.supplierId, transaction.amount)
+        }
+
+        // Update Invoice amountPaid
+        transaction.invoiceId?.let { invId ->
+            val invoiceWithItems = invoiceDao.getInvoiceById(invId)
+            val invoice = invoiceWithItems.invoice
+            invoiceDao.updateInvoice(invoice.copy(amountPaid = (invoice.amountPaid - transaction.amount).coerceAtLeast(0.0)))
+        }
+    }
+
+    suspend fun deleteInstallment(transaction: DebtTransaction) {
+        // If it was paid, we should probably revert the financial effect first
+        if (transaction.isPaid) {
+            revertInstallmentPayment(transaction)
+        } else {
+            // If it was a debt increase, deleting it should logically reduce the customer's debt 
+            // as the record of that debt is being removed
+            if (transaction.type == TransactionType.DEBT_INCREASE) {
+                if (transaction.customerId != null) {
+                    customerDao.updateDebt(transaction.customerId, -transaction.amount)
+                } else if (transaction.supplierId != null) {
+                    supplierDao.updateDebt(transaction.supplierId, -transaction.amount)
+                }
+            }
+        }
+        debtTransactionDao.delete(transaction)
     }
 
     suspend fun getLastPriceForCustomer(customerId: Long, productName: String): Double? {

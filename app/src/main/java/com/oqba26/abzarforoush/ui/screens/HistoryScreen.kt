@@ -10,16 +10,21 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -41,6 +46,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
+import com.oqba26.abzarforoush.data.InvoiceType
 import com.oqba26.abzarforoush.data.InvoiceWithItems
 import com.oqba26.abzarforoush.data.ProductViewModel
 import com.oqba26.abzarforoush.ui.components.InvoiceItemCard
@@ -53,16 +59,42 @@ import com.oqba26.abzarforoush.util.toPersianPrice
 fun HistoryScreen(viewModel: ProductViewModel, onNavigateBack: () -> Unit) {
     val context = LocalContext.current
     val invoices by viewModel.allInvoices.collectAsState(initial = emptyList())
+    val customers by viewModel.allCustomers.collectAsState(initial = emptyList())
     
     var isRefreshing by remember { mutableStateOf(false) }
     val pullRefreshState = rememberPullToRefreshState()
 
+    var searchQuery by remember { mutableStateOf("") }
+    var selectedTimeRange by remember { mutableStateOf("امروز") }
+    val timeRanges = listOf("امروز", "هفته اخیر", "ماه اخیر", "همه")
+
     val todayDate = remember { System.currentTimeMillis().toPersianDateString() }
-    
-    val todayInvoices = invoices.filter { 
-        it.invoice.timestamp.toPersianDateString() == todayDate 
+    val now = System.currentTimeMillis()
+
+    val filteredInvoices = remember(invoices, customers, searchQuery, selectedTimeRange) {
+        invoices.filter { invoiceWithItems ->
+            val invoice = invoiceWithItems.invoice
+            val customerName = customers.find { it.id == invoice.customerId }?.name ?: "نقدی"
+            
+            // Search filter
+            val matchesSearch = searchQuery.isBlank() || 
+                                customerName.contains(searchQuery, ignoreCase = true) ||
+                                invoice.id.toString().contains(searchQuery)
+            
+            // Time filter
+            val matchesTime = when (selectedTimeRange) {
+                "امروز" -> invoice.timestamp.toPersianDateString() == todayDate
+                "هفته اخیر" -> invoice.timestamp > (now - 7L * 24 * 60 * 60 * 1000)
+                "ماه اخیر" -> invoice.timestamp > (now - 30L * 24 * 60 * 60 * 1000)
+                else -> true
+            }
+
+            matchesSearch && matchesTime
+        }
     }
-    val todayTotal = todayInvoices.sumOf { it.invoice.totalAmount }
+
+    val totalSales = filteredInvoices.filter { it.invoice.type == InvoiceType.SALE }.sumOf { it.invoice.totalAmount }
+    val totalPurchases = filteredInvoices.filter { it.invoice.type == InvoiceType.PURCHASE }.sumOf { it.invoice.totalAmount }
 
     var invoiceToDelete by remember { mutableStateOf<InvoiceWithItems?>(null) }
 
@@ -122,7 +154,7 @@ fun HistoryScreen(viewModel: ProductViewModel, onNavigateBack: () -> Unit) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("تاریخچه فروش") },
+                title = { Text("تاریخچه فروش", style = MaterialTheme.typography.titleMedium) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(
@@ -150,33 +182,80 @@ fun HistoryScreen(viewModel: ProductViewModel, onNavigateBack: () -> Unit) {
             modifier = Modifier.padding(innerPadding)
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
+                // Search Bar
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    placeholder = { Text("جستجوی فاکتور یا مشتری...") },
+                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                    shape = MaterialTheme.shapes.medium,
+                    singleLine = true
+                )
+
+                // Time Range Filters
+                LazyRow(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(timeRanges) { range ->
+                        val isSelected = range == selectedTimeRange
+                        FilterChip(
+                            selected = isSelected,
+                            onClick = { selectedTimeRange = range },
+                            label = { Text(range) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = MaterialTheme.colorScheme.primary,
+                                selectedLabelColor = MaterialTheme.colorScheme.onPrimary
+                            )
+                        )
+                    }
+                }
+
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(16.dp),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
                 ) {
-                    Row(
-                        modifier = Modifier.padding(16.dp).fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column {
-                            Text(text = "فروش امروز", style = MaterialTheme.typography.titleMedium)
-                            Text(text = todayDate, style = MaterialTheme.typography.bodySmall)
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column {
+                                Text(text = "خلاصه وضعیت $selectedTimeRange", style = MaterialTheme.typography.titleMedium)
+                                if (selectedTimeRange == "امروز") {
+                                    Text(text = todayDate, style = MaterialTheme.typography.bodySmall)
+                                }
+                            }
+                            Column(horizontalAlignment = Alignment.End) {
+                                Text(
+                                    text = "فروش: ${totalSales.toPersianPrice()}",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                                if (totalPurchases > 0) {
+                                    Text(
+                                        text = "خرید: ${totalPurchases.toPersianPrice()}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.error
+                                    )
+                                }
+                            }
                         }
-                        Text(
-                            text = todayTotal.toPersianPrice(),
-                            style = MaterialTheme.typography.headlineSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
                     }
                 }
 
-                if (invoices.isEmpty()) {
+                if (filteredInvoices.isEmpty()) {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text("هنوز فاکتوری صادر نشده است.")
+                        Text(if (searchQuery.isBlank()) "فاکتوری در این بازه پیدا نشد." else "نتیجه‌ای برای جستجوی شما یافت نشد.")
                     }
                 } else {
                     LazyColumn(
@@ -184,7 +263,7 @@ fun HistoryScreen(viewModel: ProductViewModel, onNavigateBack: () -> Unit) {
                             .fillMaxSize()
                             .padding(8.dp)
                     ) {
-                        items(invoices) { invoiceWithItems ->
+                        items(filteredInvoices, key = { it.invoice.id }) { invoiceWithItems ->
                             InvoiceItemCard(
                                 invoiceWithItems = invoiceWithItems, 
                                 onSharePdf = { viewModel.shareInvoiceAsPdf(context, invoiceWithItems) },

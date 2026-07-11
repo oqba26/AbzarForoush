@@ -28,5 +28,7 @@ data class DebtTransaction(
     @SerialName("description") val description: String? = null,
     @SerialName("timestamp") val timestamp: Long = System.currentTimeMillis(),
     @SerialName("dueDate") val dueDate: Long? = null,
-    @SerialName("type") val type: TransactionType
+    @SerialName("type") val type: TransactionType,
+    @SerialName("isPaid") val isPaid: Boolean = false,
+    @SerialName("paymentTimestamp") val paymentTimestamp: Long? = null
 )

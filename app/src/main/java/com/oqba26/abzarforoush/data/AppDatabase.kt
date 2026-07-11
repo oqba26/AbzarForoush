@@ -4,10 +4,12 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.TypeConverters
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
-@Database(entities = [Product::class, Invoice::class, InvoiceItem::class, Customer::class, DebtTransaction::class, Bundle::class, BundleItem::class, Expense::class, Supplier::class, Cheque::class, PendingDeletion::class], version = 15, exportSchema = false)
+@Database(entities = [Product::class, Invoice::class, InvoiceItem::class, Customer::class, DebtTransaction::class, Bundle::class, BundleItem::class, Expense::class, Supplier::class, Cheque::class, PendingDeletion::class], version = 16, exportSchema = false)
+@TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun productDao(): ProductDao
     abstract fun invoiceDao(): InvoiceDao
@@ -22,6 +24,13 @@ abstract class AppDatabase : RoomDatabase() {
     companion object {
         @Volatile
         private var Instance: AppDatabase? = null
+
+        private val MIGRATION_15_16 = object : Migration(15, 16) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `debt_transactions` ADD COLUMN `isPaid` INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE `debt_transactions` ADD COLUMN `paymentTimestamp` INTEGER")
+            }
+        }
 
         private val MIGRATION_14_15 = object : Migration(14, 15) {
             override fun migrate(db: SupportSQLiteDatabase) {
@@ -90,7 +99,7 @@ abstract class AppDatabase : RoomDatabase() {
         fun getDatabase(context: Context): AppDatabase {
             return Instance ?: synchronized(this) {
                 Room.databaseBuilder(context, AppDatabase::class.java, "abzar_database")
-                    .addMigrations(MIGRATION_13_14, MIGRATION_14_15)
+                    .addMigrations(MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16)
                     .fallbackToDestructiveMigrationOnDowngrade()
                     .build()
                     .also { Instance = it }

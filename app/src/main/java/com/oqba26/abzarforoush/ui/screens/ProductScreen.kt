@@ -271,7 +271,7 @@ fun ProductScreen(
                 onSupplierSelected = { viewModel.selectSupplierForCart(it) },
                 suggestions = suggestions,
                 onAddSuggestion = { viewModel.addToCart(it) },
-                onCheckout = { customerId, supplierId, amountPaid, discount, customerName, customerPhone, dueDate, invoiceType ->
+                onCheckout = { customerId, supplierId, amountPaid, discount, customerName, customerPhone, dueDate, installments, invoiceType ->
                     val invoiceText = StringBuilder()
                     invoiceText.append(if (invoiceType == com.oqba26.abzarforoush.data.InvoiceType.PURCHASE) "📋 فاکتور خرید ابزارفروشی\n" else "📋 فاکتور فروش ابزارفروشی\n")
                     invoiceText.append("---------------------------\n")
@@ -303,8 +303,15 @@ fun ProductScreen(
                         val remaining = finalTotal - amountPaid
                         if (remaining > 0) {
                             invoiceText.append("📉 مانده بدهی: ${remaining.toPersianPrice()}\n")
-                            dueDate?.let {
-                                invoiceText.append("📅 سررسید: ${it.toPersianDateString()}\n")
+                            if (!installments.isNullOrEmpty()) {
+                                invoiceText.append("📌 اقساط:\n")
+                                installments.forEachIndexed { index, pair ->
+                                    invoiceText.append("${(index + 1).toPersianNumber()}. مبلغ: ${pair.first.toPersianPrice()} سررسید: ${pair.second?.toPersianDateString() ?: "نامشخص"}\n")
+                                }
+                            } else {
+                                dueDate?.let {
+                                    invoiceText.append("📅 سررسید: ${it.toPersianDateString()}\n")
+                                }
                             }
                         } else if (remaining < 0) {
                             invoiceText.append("⤴️ طلب: ${(-remaining).toPersianPrice()}\n")
@@ -320,6 +327,7 @@ fun ProductScreen(
                         amountPaid = amountPaid, 
                         totalDiscount = discount, 
                         dueDate = dueDate,
+                        installments = installments,
                         type = invoiceType
                     )
                     showCart = false
@@ -442,7 +450,7 @@ fun ProductScreen(
                 title = { 
                     Text(
                         text = if (shopName.isNotBlank()) "ابزار فروشی $shopName" else "ابزار فروشی",
-                        style = MaterialTheme.typography.titleLarge
+                        style = MaterialTheme.typography.titleMedium
                     )
                 },
                 actions = {
@@ -598,7 +606,7 @@ fun ProductScreen(
 
                     LazyColumn(modifier = Modifier.fillMaxSize()) {
                         if (selectedCategory == "پکیج‌ها") {
-                            items(bundles) { bundleWithProducts ->
+                            items(bundles, key = { it.bundle.id }) { bundleWithProducts ->
                                 com.oqba26.abzarforoush.ui.components.BundleItemCard(
                                     bundleWithProducts = bundleWithProducts,
                                     isSaleMode = selectedCustomerId != null,
@@ -607,7 +615,7 @@ fun ProductScreen(
                                 )
                             }
                         } else {
-                            items(products) { product ->
+                            items(products, key = { it.id }) { product ->
                                 ProductItem(
                                     product = product,
                                     viewModel = viewModel,

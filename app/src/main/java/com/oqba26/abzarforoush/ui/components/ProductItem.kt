@@ -93,20 +93,25 @@ fun ProductItem(
     onAddToCart: () -> Unit
 ) {
     var isExpanded by remember { mutableStateOf(false) }
+    
+    // به جای دریافت کل فاکتورها در هر آیتم، فقط وقتی باز شد محاسبات را انجام می‌دهیم
     val allInvoices by viewModel.allInvoices.collectAsState()
     
-    val productMovement = remember(allInvoices, product.name) {
-        allInvoices.flatMap { invoiceWithItems ->
-            invoiceWithItems.items.filter { it.productName == product.name }.map { item ->
-                MovementRecord(
-                    type = invoiceWithItems.invoice.type,
-                    quantity = item.quantity,
-                    price = item.priceAtSale,
-                    timestamp = invoiceWithItems.invoice.timestamp,
-                    partyName = invoiceWithItems.invoice.customerId?.toString() ?: "مشتری نقدی" // In real app, look up name
-                )
-            }
-        }.sortedByDescending { it.timestamp }
+    val productMovement = remember(allInvoices, product.name, isExpanded) {
+        if (!isExpanded) emptyList()
+        else {
+            allInvoices.flatMap { invoiceWithItems ->
+                invoiceWithItems.items.filter { it.productName == product.name }.map { item ->
+                    MovementRecord(
+                        type = invoiceWithItems.invoice.type,
+                        quantity = item.quantity,
+                        price = item.priceAtSale,
+                        timestamp = invoiceWithItems.invoice.timestamp,
+                        partyName = invoiceWithItems.invoice.customerId?.toString() ?: "مشتری نقدی"
+                    )
+                }
+            }.sortedByDescending { it.timestamp }
+        }
     }
 
     val isLowStock = product.minStock > 0 && product.stock > 0 && product.stock <= product.minStock

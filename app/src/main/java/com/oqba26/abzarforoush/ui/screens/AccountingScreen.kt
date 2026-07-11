@@ -7,11 +7,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.AccountBalance
-import androidx.compose.material.icons.filled.AccountBalanceWallet
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.People
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -23,13 +19,14 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
-import com.oqba26.abzarforoush.data.Expense
 import com.oqba26.abzarforoush.data.ExpenseCategory
 import com.oqba26.abzarforoush.data.ProductViewModel
 import com.oqba26.abzarforoush.util.PersianNumberVisualTransformation
 import com.oqba26.abzarforoush.util.cleanNumber
 import com.oqba26.abzarforoush.util.toPersianDateString
 import com.oqba26.abzarforoush.util.toPersianPrice
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -43,6 +40,18 @@ fun AccountingScreen(
     val expenses by viewModel.allExpenses.collectAsState()
     val invoices by viewModel.allInvoices.collectAsState()
     var showAddExpenseDialog by remember { mutableStateOf(value = false) }
+    var expenseToDelete by remember { mutableStateOf<CombinedTransaction?>(null) }
+
+    val isAnalyzing by viewModel.isAnalyzing.collectAsState()
+    val analysisResult by viewModel.deepAnalysisResult.collectAsState()
+    val sheetState = rememberModalBottomSheetState()
+    var showSheet by remember { mutableStateOf(false) }
+
+    LaunchedEffect(analysisResult) {
+        if (analysisResult != null) {
+            showSheet = true
+        }
+    }
 
     val totalIncome = remember(invoices) { invoices.sumOf { it.invoice.amountPaid } }
     val totalExpenses = remember(expenses) { expenses.sumOf { it.amount } }
@@ -72,10 +81,33 @@ fun AccountingScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("حسابداری و مدیریت مالی") },
+                title = { Text("حسابداری و مالی", style = MaterialTheme.typography.titleMedium) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                actions = {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.padding(end = 8.dp)
+                    ) {
+                        IconButton(
+                            onClick = { viewModel.performDeepAnalysis() },
+                            enabled = !isAnalyzing,
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            if (isAnalyzing) {
+                                CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color.White, strokeWidth = 2.dp)
+                            } else {
+                                Icon(Icons.Default.AutoAwesome, contentDescription = "تحلیل هوشمند", tint = Color.Yellow)
+                            }
+                        }
+                        Text(
+                            "مشاوره هوشمند",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onPrimary
+                        )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -168,14 +200,31 @@ fun AccountingScreen(
                     modifier = Modifier.weight(1f),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    items(recentTransactions) { transaction ->
-                        TransactionItemRow(transaction)
+                    items(recentTransactions, key = { "${it.title}_${it.timestamp}" }) { transaction ->
+                        TransactionItemRow(
+                            transaction = transaction,
+                            onDeleteClick = { if (!transaction.isIncome) expenseToDelete = transaction }
+                        )
                     }
                 }
             }
         }
     }
-    // ... (Dialog part remains same)
+
+    if (expenseToDelete != null) {
+        DeleteConfirmationDialog(
+            onDismiss = { expenseToDelete = null },
+            onConfirm = {
+                val expense = expenses.find { 
+                    it.amount == expenseToDelete?.amount && 
+                    it.timestamp == expenseToDelete?.timestamp && 
+                    getCategoryName(it.category) == expenseToDelete?.title 
+                }
+                expense?.let { viewModel.deleteExpense(it) }
+                expenseToDelete = null
+            }
+        )
+    }
 
     if (showAddExpenseDialog) {
         AddExpenseDialog(
@@ -183,6 +232,52 @@ fun AccountingScreen(
         ) { amount, category, desc ->
             viewModel.addExpense(amount, category, desc)
             showAddExpenseDialog = false
+        }
+    }
+
+    if (showSheet && analysisResult != null) {
+        ModalBottomSheet(
+            onDismissRequest = { 
+                showSheet = false
+                viewModel.clearAnalysisResult()
+            },
+            sheetState = sheetState,
+            containerColor = MaterialTheme.colorScheme.surface,
+        ) {
+            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(24.dp)
+                        .verticalScroll(rememberScrollState())
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            "تحلیل هوشمند مدیریت",
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    Spacer(Modifier.height(16.dp))
+                    Text(
+                        text = analysisResult ?: "",
+                        style = MaterialTheme.typography.bodyLarge
+                    )
+                    Spacer(Modifier.height(32.dp))
+                    Button(
+                        onClick = { 
+                            showSheet = false
+                            viewModel.clearAnalysisResult()
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("متوجه شدم")
+                    }
+                    Spacer(Modifier.height(24.dp))
+                }
+            }
         }
     }
 }
@@ -198,7 +293,7 @@ fun SummaryItem(label: String, value: String, color: Color) {
 data class CombinedTransaction(val title: String, val amount: Double, val timestamp: Long, val isIncome: Boolean)
 
 @Composable
-fun TransactionItemRow(transaction: CombinedTransaction) {
+fun TransactionItemRow(transaction: CombinedTransaction, onDeleteClick: () -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
@@ -212,16 +307,78 @@ fun TransactionItemRow(transaction: CombinedTransaction) {
                 Text(transaction.title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
                 Text(transaction.timestamp.toPersianDateString(), style = MaterialTheme.typography.labelSmall, color = Color.Gray)
             }
-            Text(
-                text = (if (transaction.isIncome) "+" else "-") + transaction.amount.toPersianPrice(),
-                style = MaterialTheme.typography.bodyLarge,
-                fontWeight = FontWeight.Bold,
-                color = if (transaction.isIncome) Color(0xFF2E7D32) else MaterialTheme.colorScheme.error
-            )
+            
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = (if (transaction.isIncome) "+" else "-") + transaction.amount.toPersianPrice(),
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = if (transaction.isIncome) Color(0xFF2E7D32) else MaterialTheme.colorScheme.error
+                )
+                
+                if (!transaction.isIncome) {
+                    IconButton(onClick = onDeleteClick) {
+                        Icon(
+                            imageVector = Icons.Default.Delete,
+                            contentDescription = "حذف هزینه",
+                            tint = MaterialTheme.colorScheme.error.copy(alpha = 0.7f),
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+            }
         }
     }
 }
 
+@Composable
+fun DeleteConfirmationDialog(onDismiss: () -> Unit, onConfirm: () -> Unit) {
+    Dialog(onDismissRequest = onDismiss) {
+        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+            Surface(
+                shape = MaterialTheme.shapes.extraLarge,
+                tonalElevation = 6.dp,
+                modifier = Modifier.fillMaxWidth().padding(16.dp)
+            ) {
+                Column(modifier = Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Text(
+                        text = "حذف هزینه",
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                    
+                    Text(
+                        text = "آیا از حذف این هزینه اطمینان دارید؟ این عمل قابل بازگشت نیست.",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = onConfirm,
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                            shape = MaterialTheme.shapes.small
+                        ) {
+                            Text("حذف شود")
+                        }
+                        OutlinedButton(
+                            onClick = onDismiss,
+                            modifier = Modifier.weight(1f),
+                            shape = MaterialTheme.shapes.small
+                        ) {
+                            Text("انصراف")
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AccountingNavCard(title: String, icon: androidx.compose.ui.graphics.vector.ImageVector, color: Color, onClick: () -> Unit, modifier: Modifier = Modifier) {
     Card(
@@ -241,44 +398,6 @@ fun AccountingNavCard(title: String, icon: androidx.compose.ui.graphics.vector.I
     }
 }
 
-@Composable
-fun ExpenseItem(expense: Expense, onDelete: () -> Unit) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-    ) {
-        Row(
-            modifier = Modifier.padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = getCategoryName(expense.category),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
-                expense.description?.let {
-                    Text(text = it, style = MaterialTheme.typography.bodySmall)
-                }
-                Text(
-                    text = expense.timestamp.toPersianDateString(),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.outline
-                )
-            }
-            Text(
-                text = expense.amount.toPersianPrice(),
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.error,
-                fontWeight = FontWeight.ExtraBold
-            )
-            IconButton(onClick = onDelete) {
-                Icon(Icons.Default.Delete, contentDescription = null, tint = Color.Red.copy(alpha = 0.6f))
-            }
-        }
-    }
-}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

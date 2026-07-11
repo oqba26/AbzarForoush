@@ -48,7 +48,7 @@ fun CashbookScreen(viewModel: ProductViewModel, onNavigateBack: () -> Unit) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("دفتر صندوق (گردش وجوه)") },
+                title = { Text("دفتر صندوق", style = MaterialTheme.typography.titleMedium) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
