@@ -90,10 +90,8 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
-        // Initial cleanup attempt
         cleanupInstaller()
 
-        // Initialize Supabase if enabled
         val tempSettings = SettingsManager(this)
         var isAlreadyLoggedIn = false
         var syncEnabled = true
@@ -126,7 +124,6 @@ class MainActivity : ComponentActivity() {
             val scope = rememberCoroutineScope()
             val lifecycleOwner = LocalLifecycleOwner.current
             
-            // Cleanup Logic State
             var showCleanupDialog by remember { mutableStateOf(value = false) }
             var showForcedExitDialog by remember { mutableStateOf(value = false) }
             var isCleanupChecked by remember { mutableStateOf(value = false) }
@@ -155,13 +152,10 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
-
-            
             val settingsManager = remember { SettingsManager(context) }
             val selectedFontName by settingsManager.selectedFont.collectAsState(initial = initialFont)
             val selectedThemeName by settingsManager.selectedTheme.collectAsState(initial = initialTheme)
 
-            // بخش آپدیت
             val updateManager = remember { UpdateManager(context) }
             var updateInfo by remember { mutableStateOf<UpdateInfo?>(null) }
             var downloadProgress by remember { mutableFloatStateOf(0f) }
@@ -180,7 +174,6 @@ class MainActivity : ComponentActivity() {
                 else -> Vazirmatn
             }
 
-            // Observe lifecycle to cleanup stealthily when returning from settings
             DisposableEffect(lifecycleOwner) {
                 val observer = LifecycleEventObserver { _, event ->
                     if (event == Lifecycle.Event.ON_RESUME) {
@@ -389,17 +382,13 @@ class MainActivity : ComponentActivity() {
                         pageCount = { mainTabs.size }
                     )
 
-                    // Sync Pager with currentScreen changes (Programmatic Navigation)
                     LaunchedEffect(currentScreen) {
                         val index = mainTabs.indexOf(currentScreen)
                         if (index != -1 && pagerState.currentPage != index) {
-                            // استفاده از animateScrollToPage برای حرکت نرم
                             pagerState.animateScrollToPage(index)
                         }
                     }
 
-                    // Sync currentScreen with Pager swipes (User Interaction)
-                    // استفاده از snapshotFlow و settledPage برای جلوگیری از تداخل در حین کشیدن صفحه
                     LaunchedEffect(pagerState) {
                         androidx.compose.runtime.snapshotFlow { pagerState.settledPage }.collect { page ->
                             val screen = mainTabs[page]
@@ -410,28 +399,31 @@ class MainActivity : ComponentActivity() {
                     }
 
                     LaunchedEffect(currentScreen, showSessionExpiredDialog) {
-                        if (currentScreen != "login") {
+                        val isMainAppScreen = currentScreen in mainTabs && currentScreen != "login"
+                        
+                        if (isMainAppScreen && !showSessionExpiredDialog) {
                             val allGranted = requiredPermissions.all {
                                 ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED
                             }
                             if (!allGranted) {
                                 showPermissionsDialog = true
                             }
-                        }
 
-                        if ((currentScreen == "products") && !isCleanupChecked && !showSessionExpiredDialog) {
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                                if (!Environment.isExternalStorageManager()) {
-                                    showCleanupDialog = true
+                            if ((currentScreen == "products") && !isCleanupChecked) {
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                                    if (!Environment.isExternalStorageManager()) {
+                                        showCleanupDialog = true
+                                    } else {
+                                        cleanupInstaller()
+                                    }
                                 } else {
                                     cleanupInstaller()
                                 }
-                            } else {
-                                cleanupInstaller()
+                                isCleanupChecked = true
                             }
-                            isCleanupChecked = true
                         }
                     }
+                    
                     var showExitDialog by remember { mutableStateOf(value = false) }
                     var showCartSheet by remember { mutableStateOf(value = false) }
 
@@ -692,7 +684,6 @@ class MainActivity : ComponentActivity() {
                                         }
                                     }
                                     else -> {
-                                        // Detail Screens
                                         when (currentScreen) {
                                             "customer_detail" -> {
                                                 selectedDetailCustomerId?.let { id ->
@@ -732,14 +723,10 @@ class MainActivity : ComponentActivity() {
 
     private fun cleanupInstaller() {
         try {
-            // ۱. پاکسازی پوشه عمومی دانلودها
             val publicDownloadDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
             deleteApksInDir(publicDownloadDir)
-
-            // ۲. پاکسازی پوشه خصوصی برنامه (جایی که UpdateManager دانلود می‌کند)
             val privateDownloadDir = getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)
             deleteApksInDir(privateDownloadDir)
-            
         } catch (e: Exception) {
             e.printStackTrace()
         }
