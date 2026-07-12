@@ -125,6 +125,39 @@ class ProductViewModel(
     private val _selectedCategory = MutableStateFlow("همه")
     val selectedCategory = _selectedCategory.asStateFlow()
 
+    val lowStockItemsCount: StateFlow<Int> = repository.allProducts
+        .map { products -> products.count { it.stock <= it.minStock && it.stock > 0 } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+
+    val todayTotalSales: StateFlow<Double> = repository.allInvoices
+        .map { invoices ->
+            val today = System.currentTimeMillis().toLocalDateStart()
+            invoices.filter { it.invoice.timestamp >= today && it.invoice.type == InvoiceType.SALE }
+                .sumOf { it.invoice.totalAmount }
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0.0)
+
+    val todayDueInstallmentsCount: StateFlow<Int> = repository.allInvoices
+        .combine(repository.allCustomers) { _, _ ->
+            val today = System.currentTimeMillis().toLocalDateStart()
+            val tomorrow = today + (24 * 60 * 60 * 1000)
+            repository.getAllTransactionsList().count { 
+                !it.isPaid && it.dueDate != null && it.dueDate in today until tomorrow 
+            }
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+
+    private fun Long.toLocalDateStart(): Long {
+        val cal = java.util.Calendar.getInstance().apply {
+            timeInMillis = this@toLocalDateStart
+            set(java.util.Calendar.HOUR_OF_DAY, 0)
+            set(java.util.Calendar.MINUTE, 0)
+            set(java.util.Calendar.SECOND, 0)
+            set(java.util.Calendar.MILLISECOND, 0)
+        }
+        return cal.timeInMillis
+    }
+
     private val _isSyncing = MutableStateFlow(false)
     val isSyncing = _isSyncing.asStateFlow()
 
@@ -967,23 +1000,11 @@ class ProductViewModel(
 
     init {
         listenToRealtimeChanges()
-        // به محض اجرای برنامه، اگر دیتابیس خالی بود تلاش کن اطلاعات را از سرور دریافت کنی
-        checkAndPerformInitialSync()
-    }
-
-    private fun checkAndPerformInitialSync() {
+        // به محض اجرای برنامه، تلاش کن اطلاعات را به‌روزرسانی کنی
         viewModelScope.launch {
-            // یک تاخیر کوتاه برای اطمینان از مقداردهی اولیه تنظیمات
-            kotlinx.coroutines.delay(1000.milliseconds)
-            
-            val products = repository.allProducts.first()
-            val customers = repository.allCustomers.first()
-            
-            // اگر دیتابیس محلی خالی بود، همگام‌سازی خودکار را شروع کن
-            if (products.isEmpty() && customers.isEmpty()) {
-                Log.d("Sync", "Local database is empty. Starting initial sync...")
-                syncWithSupabase()
-            }
+            // یک تاخیر بسیار کوتاه برای اطمینان از برقراری اینترنت و تنظیمات
+            kotlinx.coroutines.delay(500.milliseconds)
+            syncWithSupabase()
         }
     }
 

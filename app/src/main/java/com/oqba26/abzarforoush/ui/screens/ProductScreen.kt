@@ -5,6 +5,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.width
@@ -24,13 +25,18 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ImportExport
+import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
@@ -54,6 +60,7 @@ import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
@@ -102,6 +109,10 @@ fun ProductScreen(
     val selectedCustomerId by viewModel.selectedCustomerIdForCart.collectAsState()
     val selectedSupplierId by viewModel.selectedSupplierIdForCart.collectAsState()
     val isPurchaseMode by viewModel.isPurchaseMode.collectAsState()
+
+    val todaySales by viewModel.todayTotalSales.collectAsState()
+    val lowStockCount by viewModel.lowStockItemsCount.collectAsState()
+    val dueInstallmentsCount by viewModel.todayDueInstallmentsCount.collectAsState()
     
     val context = LocalContext.current
     val settingsManager = remember { com.oqba26.abzarforoush.data.SettingsManager(context) }
@@ -536,6 +547,14 @@ fun ProductScreen(
             modifier = Modifier.fillMaxSize()
         ) {
             Column(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
+                // Dashboard Section
+                DashboardSection(
+                    todaySales = todaySales,
+                    lowStockCount = lowStockCount,
+                    dueInstallmentsCount = dueInstallmentsCount,
+                    onLowStockClick = { showShoppingList = true }
+                )
+
                 SearchBar(
                     query = searchQuery,
                     onQueryChange = { viewModel.onSearchQueryChange(it) },
@@ -630,6 +649,74 @@ fun ProductScreen(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+fun DashboardSection(
+    todaySales: Double,
+    lowStockCount: Int,
+    dueInstallmentsCount: Int,
+    onLowStockClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        DashboardCard(
+            label = "فروش امروز",
+            value = todaySales.toPersianPrice(),
+            icon = Icons.AutoMirrored.Filled.TrendingUp,
+            color = Color(0xFF2E7D32),
+            modifier = Modifier.weight(1.2f)
+        )
+        DashboardCard(
+            label = "کمبود موجودی",
+            value = "${lowStockCount.toString().toPersianDigits()} کالا",
+            icon = Icons.Default.Warning,
+            color = if (lowStockCount > 0) Color(0xFFE65100) else Color.Gray,
+            modifier = Modifier.weight(1f),
+            onClick = if (lowStockCount > 0) onLowStockClick else null
+        )
+        DashboardCard(
+            label = "اقساط امروز",
+            value = "${dueInstallmentsCount.toString().toPersianDigits()} مورد",
+            icon = Icons.Default.NotificationsActive,
+            color = if (dueInstallmentsCount > 0) Color.Red else Color.Gray,
+            modifier = Modifier.weight(1f)
+        )
+    }
+}
+
+@Composable
+fun DashboardCard(
+    label: String,
+    value: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    color: Color,
+    modifier: Modifier = Modifier,
+    onClick: (() -> Unit)? = null
+) {
+    Card(
+        modifier = modifier.height(80.dp),
+        shape = MaterialTheme.shapes.medium,
+        colors = CardDefaults.cardColors(containerColor = color.copy(alpha = 0.1f)),
+        border = BorderStroke(0.5.dp, color.copy(alpha = 0.3f)),
+        onClick = { onClick?.invoke() },
+        enabled = onClick != null
+    ) {
+        Column(
+            modifier = Modifier.padding(8.dp).fillMaxSize(),
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Icon(icon, null, tint = color, modifier = Modifier.size(20.dp))
+            Spacer(Modifier.height(4.dp))
+            Text(label, style = MaterialTheme.typography.labelSmall, color = color.copy(alpha = 0.8f))
+            Text(value, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = color)
         }
     }
 }

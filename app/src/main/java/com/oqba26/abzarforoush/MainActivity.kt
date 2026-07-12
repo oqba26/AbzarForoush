@@ -286,7 +286,7 @@ class MainActivity : ComponentActivity() {
                                                 containerColor = MaterialTheme.colorScheme.primary
                                             )
                                         ) {
-                                            Text("تنظیمات دسترسی", color = MaterialTheme.colorScheme.onPrimary, style = MaterialTheme.typography.labelLarge)
+                                            Text("تنظیمات", color = MaterialTheme.colorScheme.onPrimary, style = MaterialTheme.typography.labelLarge)
                                         }
                                         Button(
                                             onClick = { 
@@ -299,7 +299,7 @@ class MainActivity : ComponentActivity() {
                                             ),
                                             shape = MaterialTheme.shapes.medium
                                         ) {
-                                            Text("خروج از برنامه", color = MaterialTheme.colorScheme.onError, style = MaterialTheme.typography.labelLarge)
+                                            Text("خروج", color = MaterialTheme.colorScheme.onError, style = MaterialTheme.typography.labelLarge)
                                         }
                                     }
                                 }
@@ -398,19 +398,23 @@ class MainActivity : ComponentActivity() {
                         }
                     }
 
+                    var hasCheckedPermissionsThisSession by remember { mutableStateOf(value = false) }
+
                     LaunchedEffect(currentScreen, showSessionExpiredDialog) {
                         val isMainAppScreen = currentScreen in mainTabs && currentScreen != "login"
                         
-                        if (isMainAppScreen && !showSessionExpiredDialog) {
+                        if (isMainAppScreen && !showSessionExpiredDialog && !hasCheckedPermissionsThisSession) {
                             val allGranted = requiredPermissions.all {
                                 ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED
                             }
                             if (!allGranted) {
                                 showPermissionsDialog = true
                             }
+                            hasCheckedPermissionsThisSession = true
+                        }
 
-                            if ((currentScreen == "products") && !isCleanupChecked) {
-                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                        if ((currentScreen == "products") && !isCleanupChecked && !showSessionExpiredDialog) {
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                                     if (!Environment.isExternalStorageManager()) {
                                         showCleanupDialog = true
                                     } else {
@@ -422,7 +426,6 @@ class MainActivity : ComponentActivity() {
                                 isCleanupChecked = true
                             }
                         }
-                    }
                     
                     var showExitDialog by remember { mutableStateOf(value = false) }
                     var showCartSheet by remember { mutableStateOf(value = false) }
@@ -456,6 +459,7 @@ class MainActivity : ComponentActivity() {
                                     tonalElevation = 6.dp,
                                     modifier = Modifier.fillMaxWidth().padding(16.dp)
                                 ) {
+                                    @Suppress("SpellCheckingInspection")
                                     Column(modifier = Modifier.padding(24.dp)) {
                                         Text(
                                             text = "دسترسی‌های الزامی",
@@ -483,11 +487,12 @@ class MainActivity : ComponentActivity() {
                                             Text("متوجه شدم؛ اعطای دسترسی", color = MaterialTheme.colorScheme.onPrimary)
                                         }
                                         Spacer(modifier = Modifier.height(8.dp))
+                                        @Suppress("SpellCheckingInspection")
                                         TextButton(
                                             onClick = { finish() },
                                             modifier = Modifier.fillMaxWidth()
                                         ) {
-                                            Text("خروج از برنامه", color = MaterialTheme.colorScheme.error)
+                                            Text("خروج", color = MaterialTheme.colorScheme.error)
                                         }
                                     }
                                 }
@@ -497,6 +502,7 @@ class MainActivity : ComponentActivity() {
 
                     if (showSessionExpiredDialog) {
                         Dialog(onDismissRequest = { }) {
+                            @Suppress("SpellCheckingInspection")
                             CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
                                 Surface(
                                     shape = MaterialTheme.shapes.extraLarge,
@@ -630,7 +636,11 @@ class MainActivity : ComponentActivity() {
                                 when (currentScreen) {
                                     "login" -> {
                                         LoginScreen { 
-                                            scope.launch { settingsManager.setLoggedIn(loggedIn = true) }
+                                            scope.launch { 
+                                                settingsManager.setLoggedIn(loggedIn = true)
+                                                // بلافاصله بعد از لاگین، همگام‌سازی را شروع کن
+                                                viewModel.syncWithSupabase()
+                                            }
                                             currentScreen = "products" 
                                         }
                                     }

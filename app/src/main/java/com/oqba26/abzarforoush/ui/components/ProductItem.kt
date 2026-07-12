@@ -124,9 +124,19 @@ fun ProductItem(
             .clickable { isExpanded = !isExpanded },
         elevation = CardDefaults.cardElevation(defaultElevation = if (isExpanded) 6.dp else 2.dp),
         colors = CardDefaults.cardColors(
-            containerColor = if (isInCart) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f) else MaterialTheme.colorScheme.surface
+            containerColor = when {
+                isInCart -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f)
+                isOutOfStock -> Color(0xFFFFEBEE) // Very light red
+                isLowStock -> Color(0xFFFFF3E0)  // Very light orange
+                else -> MaterialTheme.colorScheme.surface
+            }
         ),
-        border = if (isExpanded) BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)) else null,
+        border = when {
+            isExpanded -> BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f))
+            isOutOfStock -> BorderStroke(1.dp, Color.Red.copy(alpha = 0.3f))
+            isLowStock -> BorderStroke(1.dp, Color(0xFFE65100).copy(alpha = 0.3f))
+            else -> null
+        },
         shape = MaterialTheme.shapes.medium
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
