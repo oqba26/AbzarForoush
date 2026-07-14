@@ -205,8 +205,9 @@ class MainActivity : ComponentActivity() {
                                         }
                                     }
                                 }
+                                updateInfo = null // فقط وقتی دانلود شروع شد دیالوگ را ببند
                             }
-                            updateInfo = null
+                            // اگر id == -1 بود، یعنی کاربر به تنظیمات رفته و دیالوگ باز می‌ماند تا برگردد
                         }
                     )
                 }

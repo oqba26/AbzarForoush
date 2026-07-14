@@ -10,6 +10,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -25,7 +26,6 @@ import androidx.compose.ui.window.Dialog
 import com.oqba26.abzarforoush.util.toPersianDigits
 import saman.zamani.persiandate.PersianDate
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ShamsiDatePicker(
     initialTimestamp: Long? = null,
@@ -59,62 +59,56 @@ fun ShamsiDatePicker(
                 modifier = Modifier.fillMaxWidth(0.95f)
             ) {
                 Column(modifier = Modifier.fillMaxWidth()) {
-                    // Header
+                    // Header - Exact style from the photo but with App Theme
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .background(MaterialTheme.colorScheme.primary)
-                            .padding(vertical = 24.dp, horizontal = 24.dp)
+                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.8f))
+                            .padding(vertical = 20.dp),
+                        contentAlignment = Alignment.Center
                     ) {
-                        Column {
-                            Text(
-                                text = "انتخاب تاریخ",
-                                color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.8f),
-                                style = MaterialTheme.typography.labelMedium
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
-                            val selectedPDate = PersianDate().apply {
-                                shYear = displayedYear
-                                shMonth = displayedMonth
-                                shDay = selectedDay
-                            }
-                            Text(
-                                text = "${selectedPDate.dayName()}، ${selectedDay.toString().toPersianDigits()} ${selectedPDate.monthName()}",
-                                color = MaterialTheme.colorScheme.onPrimary,
-                                style = MaterialTheme.typography.headlineMedium,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
+                        Text(
+                            text = "انتخاب تاریخ شمسی",
+                            color = Color.White,
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.Bold
+                        )
                     }
 
                     Column(modifier = Modifier.padding(16.dp)) {
-                        // Month & Year Selector
+                        // Month & Year Selector - Centered style from photo
                         Row(
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             IconButton(onClick = {
-                                if (displayedMonth == 1) {
-                                    displayedMonth = 12
-                                    displayedYear--
+                                if (displayedMonth == 12) {
+                                    displayedMonth = 1
+                                    displayedYear++
                                 } else {
-                                    displayedMonth--
+                                    displayedMonth++
                                 }
                             }) {
-                                Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "ماه قبل")
+                                Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "ماه بعد")
                             }
 
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Box {
+                                // Month Picker
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .clickable { showMonthPicker = true }
+                                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                                ) {
                                     Text(
                                         text = PersianDate().apply { shMonth = displayedMonth }.monthName(),
                                         style = MaterialTheme.typography.titleMedium,
-                                        modifier = Modifier
-                                            .clip(RoundedCornerShape(8.dp))
-                                            .clickable { showMonthPicker = true }
-                                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                                        fontWeight = FontWeight.Bold
                                     )
+                                    Icon(Icons.Default.ArrowDropDown, null, modifier = Modifier.size(20.dp))
+                                    
                                     DropdownMenu(
                                         expanded = showMonthPicker,
                                         onDismissRequest = { showMonthPicker = false }
@@ -130,32 +124,41 @@ fun ShamsiDatePicker(
                                         }
                                     }
                                 }
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(
-                                    text = displayedYear.toString().toPersianDigits(),
-                                    style = MaterialTheme.typography.titleMedium,
+                                
+                                Spacer(modifier = Modifier.width(16.dp))
+
+                                // Year Picker
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
                                     modifier = Modifier
                                         .clip(RoundedCornerShape(8.dp))
                                         .clickable { showYearPicker = true }
                                         .padding(horizontal = 8.dp, vertical = 4.dp)
-                                )
+                                ) {
+                                    Text(
+                                        text = displayedYear.toString().toPersianDigits(),
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Icon(Icons.Default.ArrowDropDown, null, modifier = Modifier.size(20.dp))
+                                }
                             }
 
                             IconButton(onClick = {
-                                if (displayedMonth == 12) {
-                                    displayedMonth = 1
-                                    displayedYear++
+                                if (displayedMonth == 1) {
+                                    displayedMonth = 12
+                                    displayedYear--
                                 } else {
-                                    displayedMonth++
+                                    displayedMonth--
                                 }
                             }) {
-                                Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "ماه بعد")
+                                Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "ماه قبل")
                             }
                         }
 
                         Spacer(modifier = Modifier.height(16.dp))
 
-                        // Days of Week Header
+                        // Days of Week Header - Same as photo
                         Row(modifier = Modifier.fillMaxWidth()) {
                             val days = listOf("ش", "ی", "د", "س", "چ", "پ", "ج")
                             days.forEach { d ->
@@ -163,13 +166,14 @@ fun ShamsiDatePicker(
                                     text = d,
                                     modifier = Modifier.weight(1f),
                                     textAlign = TextAlign.Center,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = Color.Gray
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
                                 )
                             }
                         }
 
-                        Spacer(modifier = Modifier.height(8.dp))
+                        Spacer(modifier = Modifier.height(12.dp))
 
                         // Calendar Grid
                         val monthData = remember(displayedYear, displayedMonth) {
@@ -204,10 +208,10 @@ fun ShamsiDatePicker(
                                     ) {
                                         Text(
                                             text = day.toString().toPersianDigits(),
-                                            color = if (isSelected) MaterialTheme.colorScheme.onPrimary
+                                            color = if (isSelected) Color.White
                                             else if (isFriday) MaterialTheme.colorScheme.error
                                             else MaterialTheme.colorScheme.onSurface,
-                                            style = MaterialTheme.typography.bodyMedium,
+                                            style = MaterialTheme.typography.bodyLarge,
                                             fontWeight = if (isSelected || isToday) FontWeight.Bold else FontWeight.Normal
                                         )
                                     }
@@ -217,15 +221,11 @@ fun ShamsiDatePicker(
 
                         Spacer(modifier = Modifier.height(24.dp))
 
-                        // Actions
+                        // Actions - Two equal buttons as requested, matching App Style
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.End
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                            TextButton(onClick = onDismiss) {
-                                Text("انصراف", color = MaterialTheme.colorScheme.error)
-                            }
-                            Spacer(modifier = Modifier.width(8.dp))
                             Button(
                                 onClick = {
                                     val result = PersianDate().apply {
@@ -235,9 +235,22 @@ fun ShamsiDatePicker(
                                         hour = 12
                                     }
                                     onDateSelected(result.time)
-                                }
+                                },
+                                modifier = Modifier.weight(1f).height(48.dp),
+                                shape = MaterialTheme.shapes.medium
                             ) {
-                                Text("تایید")
+                                Text("تایید", style = MaterialTheme.typography.labelLarge)
+                            }
+                            Button(
+                                onClick = onDismiss,
+                                modifier = Modifier.weight(1f).height(48.dp),
+                                shape = MaterialTheme.shapes.medium,
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.error.copy(alpha = 0.1f),
+                                    contentColor = MaterialTheme.colorScheme.error
+                                )
+                            ) {
+                                Text("انصراف", style = MaterialTheme.typography.labelLarge)
                             }
                         }
                     }

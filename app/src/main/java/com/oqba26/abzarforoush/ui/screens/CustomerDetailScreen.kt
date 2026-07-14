@@ -337,20 +337,44 @@ fun SimpleConfirmDialog(
         Surface(
             shape = MaterialTheme.shapes.extraLarge,
             tonalElevation = 6.dp,
-            modifier = Modifier.padding(16.dp)
+            modifier = Modifier.padding(16.dp).fillMaxWidth()
         ) {
-            Column(modifier = Modifier.padding(24.dp)) {
-                Text(title, style = MaterialTheme.typography.headlineSmall, color = if (isDanger) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary)
-                Spacer(Modifier.height(16.dp))
-                Text(message, style = MaterialTheme.typography.bodyMedium)
-                Spacer(Modifier.height(24.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column {
+                Column(modifier = Modifier.padding(24.dp)) {
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.headlineSmall,
+                        color = if (isDanger) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(Modifier.height(16.dp))
+                    Text(text = message, style = MaterialTheme.typography.bodyMedium)
+                }
+                
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
                     Button(
                         onClick = onConfirm,
-                        modifier = Modifier.weight(1f),
-                        colors = if (isDanger) ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error) else ButtonDefaults.buttonColors()
-                    ) { Text("تایید") }
-                    TextButton(onClick = onDismiss, modifier = Modifier.weight(1f)) { Text("انصراف") }
+                        modifier = Modifier.weight(1f).height(48.dp),
+                        shape = MaterialTheme.shapes.medium,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (isDanger) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+                        )
+                    ) {
+                        Text("تایید", style = MaterialTheme.typography.labelLarge)
+                    }
+                    Button(
+                        onClick = onDismiss,
+                        modifier = Modifier.weight(1f).height(48.dp),
+                        shape = MaterialTheme.shapes.medium,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    ) {
+                        Text("انصراف", style = MaterialTheme.typography.labelLarge)
+                    }
                 }
             }
         }

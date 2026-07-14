@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -31,10 +32,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.oqba26.abzarforoush.data.ProductViewModel
 import com.oqba26.abzarforoush.data.SettingsManager
 import com.oqba26.abzarforoush.util.SupabaseManager
+import com.oqba26.abzarforoush.util.cleanNumber
 import com.oqba26.abzarforoush.util.toPersianDigits
 import io.github.jan.supabase.auth.auth
 import kotlinx.coroutines.launch
@@ -146,12 +149,13 @@ fun SettingsScreen(
                 Spacer(Modifier.height(8.dp))
 
                 OutlinedTextField(
-                    value = localShopPhone,
-                    onValueChange = { localShopPhone = it },
+                    value = localShopPhone.toPersianDigits(),
+                    onValueChange = { localShopPhone = it.cleanNumber() },
                     label = { Text("شماره تماس فروشگاه") },
                     modifier = Modifier.fillMaxWidth(),
                     shape = MaterialTheme.shapes.medium,
-                    singleLine = true
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone)
                 )
 
                 Spacer(Modifier.height(8.dp))
@@ -168,12 +172,13 @@ fun SettingsScreen(
                 Spacer(Modifier.height(8.dp))
 
                 OutlinedTextField(
-                    value = localShopTaxId,
-                    onValueChange = { localShopTaxId = it },
+                    value = localShopTaxId.toPersianDigits(),
+                    onValueChange = { localShopTaxId = it.cleanNumber() },
                     label = { Text("شناسه اقتصادی / کد ملی") },
                     modifier = Modifier.fillMaxWidth(),
                     shape = MaterialTheme.shapes.medium,
-                    singleLine = true
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
                 )
 
                 Spacer(Modifier.height(16.dp))
