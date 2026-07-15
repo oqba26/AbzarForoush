@@ -1,7 +1,7 @@
 {
-  "versionCode": 18,
-  "versionName": "1.1.2",
-  "url": "https://github.com/oqba26/AbzarForoush/releases/download/v1.1.2/AbzarForoush-v1.1.2.apk",
-  "releaseNotes": "باز طراحی دیالوگ انتخاب تاریخ شمسی ، اصلاح موارد جزئی دیگر",
+  "versionCode": 19,
+  "versionName": "1.1.3",
+  "url": "https://github.com/oqba26/AbzarForoush/releases/download/v1.1.3/AbzarForoush-v1.1.3.apk",
+  "releaseNotes": "اصلاح هماهنگی رنگ\u200Cهای رابط کاربری و بهینه\u200Cسازی عملکرد جابجایی بین صفحات",
   "isForceUpdate": true
 }
