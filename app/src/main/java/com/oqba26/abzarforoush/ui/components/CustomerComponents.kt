@@ -348,7 +348,8 @@ fun SettleDebtDialog(
                             onClick = onDismiss,
                             modifier = Modifier.weight(1f),
                             colors = ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme.colorScheme.error
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                contentColor = MaterialTheme.colorScheme.onSurfaceVariant
                             ),
                             shape = MaterialTheme.shapes.small
                         ) {
@@ -480,7 +481,10 @@ fun EditCustomerDialog(
                         Button(
                             onClick = onDismiss,
                             modifier = Modifier.weight(1f),
-                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                            ),
                             shape = MaterialTheme.shapes.small
                         ) {
                             Text("انصراف")
@@ -662,7 +666,10 @@ fun AddCustomerDialog(
                         Button(
                             onClick = onDismiss,
                             modifier = Modifier.weight(1f),
-                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                            ),
                             shape = MaterialTheme.shapes.small
                         ) {
                             Text("انصراف")

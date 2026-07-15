@@ -10,6 +10,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -37,13 +38,16 @@ fun AccountingScreen(
     onNavigateToCheques: () -> Unit,
     onNavigateToCashbook: () -> Unit,
 ) {
-    val expenses by viewModel.allExpenses.collectAsState()
-    val invoices by viewModel.allInvoices.collectAsState()
+    val expenses by viewModel.allExpenses.collectAsStateWithLifecycle()
+    val invoices by viewModel.allInvoices.collectAsStateWithLifecycle()
+    val financialSummary by viewModel.financialSummary.collectAsStateWithLifecycle()
+    val recentTransactions by viewModel.recentTransactions.collectAsStateWithLifecycle()
+    
     var showAddExpenseDialog by remember { mutableStateOf(value = false) }
     var expenseToDelete by remember { mutableStateOf<CombinedTransaction?>(null) }
 
-    val isAnalyzing by viewModel.isAnalyzing.collectAsState()
-    val analysisResult by viewModel.deepAnalysisResult.collectAsState()
+    val isAnalyzing by viewModel.isAnalyzing.collectAsStateWithLifecycle()
+    val analysisResult by viewModel.deepAnalysisResult.collectAsStateWithLifecycle()
     val sheetState = rememberModalBottomSheetState()
     var showSheet by remember { mutableStateOf(false) }
 
@@ -53,30 +57,9 @@ fun AccountingScreen(
         }
     }
 
-    val totalIncome = remember(invoices) { invoices.sumOf { it.invoice.amountPaid } }
-    val totalExpenses = remember(expenses) { expenses.sumOf { it.amount } }
+    val totalIncome = financialSummary?.totalReceived ?: 0.0
+    val totalExpenses = financialSummary?.totalExpenses ?: 0.0
     val balance = totalIncome - totalExpenses
-
-    val recentTransactions = remember(invoices, expenses) {
-        val list = mutableListOf<CombinedTransaction>()
-        invoices.forEach {
-            list.add(CombinedTransaction(
-                title = "فاکتور #${it.invoice.id} (${it.invoice.customerId ?: "نقدی"})",
-                amount = it.invoice.amountPaid,
-                timestamp = it.invoice.timestamp,
-                isIncome = true
-            ))
-        }
-        expenses.forEach {
-            list.add(CombinedTransaction(
-                title = getCategoryName(it.category),
-                amount = it.amount,
-                timestamp = it.timestamp,
-                isIncome = false
-            ))
-        }
-        list.sortedByDescending { it.timestamp }.take(20)
-    }
 
     Scaffold(
         topBar = {

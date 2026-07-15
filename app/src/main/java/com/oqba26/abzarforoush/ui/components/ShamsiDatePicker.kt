@@ -83,14 +83,14 @@ fun ShamsiDatePicker(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             IconButton(onClick = {
-                                if (displayedMonth == 12) {
-                                    displayedMonth = 1
-                                    displayedYear++
+                                if (displayedMonth == 1) {
+                                    displayedMonth = 12
+                                    displayedYear--
                                 } else {
-                                    displayedMonth++
+                                    displayedMonth--
                                 }
                             }) {
-                                Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "ماه بعد")
+                                Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "ماه قبل")
                             }
 
                             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -145,14 +145,14 @@ fun ShamsiDatePicker(
                             }
 
                             IconButton(onClick = {
-                                if (displayedMonth == 1) {
-                                    displayedMonth = 12
-                                    displayedYear--
+                                if (displayedMonth == 12) {
+                                    displayedMonth = 1
+                                    displayedYear++
                                 } else {
-                                    displayedMonth--
+                                    displayedMonth++
                                 }
                             }) {
-                                Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "ماه قبل")
+                                Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "ماه بعد")
                             }
                         }
 
@@ -246,8 +246,8 @@ fun ShamsiDatePicker(
                                 modifier = Modifier.weight(1f).height(48.dp),
                                 shape = MaterialTheme.shapes.medium,
                                 colors = ButtonDefaults.buttonColors(
-                                    containerColor = MaterialTheme.colorScheme.error.copy(alpha = 0.1f),
-                                    contentColor = MaterialTheme.colorScheme.error
+                                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             ) {
                                 Text("انصراف", style = MaterialTheme.typography.labelLarge)

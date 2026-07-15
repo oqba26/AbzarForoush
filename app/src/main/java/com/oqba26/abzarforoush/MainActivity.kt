@@ -53,6 +53,7 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.oqba26.abzarforoush.data.AppDatabase
 import com.oqba26.abzarforoush.data.ProductRepository
@@ -296,11 +297,12 @@ class MainActivity : ComponentActivity() {
                                             },
                                             modifier = Modifier.weight(1f).height(48.dp),
                                             colors = ButtonDefaults.buttonColors(
-                                                containerColor = MaterialTheme.colorScheme.error
+                                                containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                                contentColor = MaterialTheme.colorScheme.onSurfaceVariant
                                             ),
                                             shape = MaterialTheme.shapes.medium
                                         ) {
-                                            Text("خروج", color = MaterialTheme.colorScheme.onError, style = MaterialTheme.typography.labelLarge)
+                                            Text("خروج", style = MaterialTheme.typography.labelLarge)
                                         }
                                     }
                                 }
@@ -431,8 +433,8 @@ class MainActivity : ComponentActivity() {
                     var showExitDialog by remember { mutableStateOf(value = false) }
                     var showCartSheet by remember { mutableStateOf(value = false) }
 
-                    val cartItems by viewModel.cartItems.collectAsState()
-                    val isSyncing by viewModel.isSyncing.collectAsState()
+                    val cartItems by viewModel.cartItems.collectAsStateWithLifecycle()
+                    val isSyncing by viewModel.isSyncing.collectAsStateWithLifecycle()
 
                     val filePickerLauncher = rememberLauncherForActivityResult(
                         ActivityResultContracts.GetContent()
@@ -564,26 +566,27 @@ class MainActivity : ComponentActivity() {
                                             modifier = Modifier.fillMaxWidth(),
                                             horizontalArrangement = Arrangement.spacedBy(12.dp)
                                         ) {
-                                            Button(
-                                                onClick = { finish() },
-                                                modifier = Modifier.weight(1f).height(48.dp),
-                                                shape = MaterialTheme.shapes.medium,
-                                                colors = ButtonDefaults.buttonColors(
-                                                    containerColor = MaterialTheme.colorScheme.primary
-                                                )
-                                            ) {
-                                                Text("خروج", color = MaterialTheme.colorScheme.onPrimary, style = MaterialTheme.typography.labelLarge)
-                                            }
-                                            Button(
-                                                onClick = { showExitDialog = false },
-                                                modifier = Modifier.weight(1f).height(48.dp),
-                                                colors = ButtonDefaults.buttonColors(
-                                                    containerColor = MaterialTheme.colorScheme.error
-                                                ),
-                                                shape = MaterialTheme.shapes.medium
-                                            ) {
-                                                Text("انصراف", color = MaterialTheme.colorScheme.onError, style = MaterialTheme.typography.labelLarge)
-                                            }
+                                        Button(
+                                            onClick = { finish() },
+                                            modifier = Modifier.weight(1f).height(48.dp),
+                                            shape = MaterialTheme.shapes.medium,
+                                            colors = ButtonDefaults.buttonColors(
+                                                containerColor = MaterialTheme.colorScheme.error
+                                            )
+                                        ) {
+                                            Text("خروج", color = MaterialTheme.colorScheme.onError, style = MaterialTheme.typography.labelLarge)
+                                        }
+                                        Button(
+                                            onClick = { showExitDialog = false },
+                                            modifier = Modifier.weight(1f).height(48.dp),
+                                            colors = ButtonDefaults.buttonColors(
+                                                containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                                contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                            ),
+                                            shape = MaterialTheme.shapes.medium
+                                        ) {
+                                            Text("انصراف", style = MaterialTheme.typography.labelLarge)
+                                        }
                                         }
                                     }
                                 }

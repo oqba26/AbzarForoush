@@ -8,8 +8,9 @@ import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
@@ -35,6 +36,15 @@ import com.oqba26.abzarforoush.util.TimeProvider
 import java.time.LocalDate
 import java.time.ZoneOffset
 import kotlin.time.Duration.Companion.milliseconds
+
+data class FinancialSummary(
+    val totalSales: Double,
+    val totalReceived: Double,
+    val totalDebt: Double,
+    val totalExpenses: Double,
+    val grossProfit: Double,
+    val netProfit: Double
+)
 
 class ProductViewModel(
     private val repository: ProductRepository,
@@ -144,8 +154,64 @@ class ProductViewModel(
             repository.getAllTransactionsList().count { 
                 !it.isPaid && it.dueDate != null && it.dueDate in today until tomorrow 
             }
-        }
+        }.flowOn(Dispatchers.Default)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+
+    // محاسبات مالی بهینه‌سازی شده برای جلوگیری از لگ UI
+    val financialSummary = combine(
+        repository.allInvoices,
+        repository.allInvoiceItems,
+        repository.allCustomers,
+        repository.allExpenses
+    ) { invoices, items, customers, expenses ->
+        val totalSales = invoices.sumOf { it.invoice.totalAmount }
+        val totalReceived = invoices.sumOf { it.invoice.amountPaid }
+        val totalDebt = customers.sumOf { it.totalDebt }
+        val totalExpenses = expenses.sumOf { it.amount }
+        val grossProfit = items.sumOf { (it.priceAtSale - it.purchasePriceAtSale) * it.quantity - it.discount } - 
+                         invoices.sumOf { it.invoice.totalDiscount }
+        
+        FinancialSummary(
+            totalSales = totalSales,
+            totalReceived = totalReceived,
+            totalDebt = totalDebt,
+            totalExpenses = totalExpenses,
+            grossProfit = grossProfit,
+            netProfit = grossProfit - totalExpenses
+        )
+    }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    val topProducts = repository.allInvoiceItems.map { items ->
+        items.groupBy { it.productName }
+            .mapValues { entry -> entry.value.sumOf { it.quantity } }
+            .toList()
+            .sortedByDescending { it.second }
+            .take(5)
+    }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val recentTransactions = combine(
+        repository.allInvoices,
+        repository.allExpenses
+    ) { invoices, expenses ->
+        val list = mutableListOf<com.oqba26.abzarforoush.ui.screens.CombinedTransaction>()
+        invoices.forEach {
+            list.add(com.oqba26.abzarforoush.ui.screens.CombinedTransaction(
+                title = "فاکتور #${it.invoice.id} (${it.invoice.customerId ?: "نقدی"})",
+                amount = it.invoice.amountPaid,
+                timestamp = it.invoice.timestamp,
+                isIncome = true
+            ))
+        }
+        expenses.forEach {
+            list.add(com.oqba26.abzarforoush.ui.screens.CombinedTransaction(
+                title = com.oqba26.abzarforoush.ui.screens.getCategoryName(it.category),
+                amount = it.amount,
+                timestamp = it.timestamp,
+                isIncome = false
+            ))
+        }
+        list.sortedByDescending { it.timestamp }.take(20)
+    }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private fun Long.toLocalDateStart(): Long {
         val cal = java.util.Calendar.getInstance().apply {

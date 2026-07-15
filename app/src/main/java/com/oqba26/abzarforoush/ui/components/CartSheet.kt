@@ -225,7 +225,8 @@ fun CartSheetContent(
                             manualCustomerName = contact.name
                             manualCustomerPhone = contact.phoneNumber
                             suggestedContacts = emptyList()
-                        }
+                        },
+                        selectedPersonId = if (isPurchaseMode) selectedSupplierId else selectedCustomerId
                     )
                 }
             }
@@ -292,73 +293,52 @@ fun CartItemCard(
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
     ) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
+        Row(
+            modifier = Modifier.padding(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = item.product.name,
-                    style = MaterialTheme.typography.titleMedium,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = "${item.quantity.toString().toPersianDigits()} ${item.product.unit} × ${item.sellPrice.toPersianPrice()}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = { if (item.quantity > 0) onUpdateQuantity(item, item.quantity - 1) }, modifier = Modifier.size(28.dp)) {
+                    Icon(Icons.Default.Remove, null, modifier = Modifier.size(18.dp))
+                }
+                Text(
+                    text = item.quantity.toString().toPersianDigits(),
+                    style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.Bold,
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.padding(horizontal = 4.dp)
                 )
-                IconButton(onClick = { onRemove(item) }, modifier = Modifier.size(32.dp)) {
-                    Icon(Icons.Default.Delete, null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(20.dp))
+                IconButton(onClick = { onUpdateQuantity(item, item.quantity + 1) }, modifier = Modifier.size(28.dp)) {
+                    Icon(Icons.Default.Add, null, modifier = Modifier.size(18.dp))
                 }
             }
-
-            Spacer(Modifier.height(8.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // Quantity with label
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("تعداد (${item.product.unit})", style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(bottom = 4.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(onClick = { if (item.quantity > 0) onUpdateQuantity(item, item.quantity - 1) }, modifier = Modifier.size(32.dp)) {
-                            Icon(Icons.Default.Remove, null)
-                        }
-                        Text(
-                            text = item.quantity.toString().toPersianDigits(),
-                            style = MaterialTheme.typography.bodyLarge,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(horizontal = 8.dp)
-                        )
-                        IconButton(onClick = { onUpdateQuantity(item, item.quantity + 1) }, modifier = Modifier.size(32.dp)) {
-                            Icon(Icons.Default.Add, null)
-                        }
-                    }
-                }
-
-                // Price unit
-                OutlinedTextField(
-                    value = if (item.sellPrice == 0.0) "" else item.sellPrice.toLong().toString(),
-                    onValueChange = { input ->
-                        val cleaned = input.cleanNumber()
-                        cleaned.toDoubleOrNull()?.let { onUpdatePrice(item, it) }
-                    },
-                    label = { Text("قیمت واحد") },
-                    modifier = Modifier.weight(1.2f),
-                    textStyle = MaterialTheme.typography.bodyMedium,
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    visualTransformation = PersianNumberVisualTransformation()
-                )
-            }
-
+            
+            Spacer(Modifier.width(8.dp))
+            
             Text(
-                text = "جمع: ${item.totalPrice.toPersianPrice()}",
-                style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.align(Alignment.End).padding(top = 8.dp)
+                text = item.totalPrice.toPersianPrice(),
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
             )
+            
+            IconButton(onClick = { onRemove(item) }, modifier = Modifier.size(32.dp)) {
+                Icon(Icons.Default.Delete, null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(20.dp))
+            }
         }
     }
 }
@@ -386,131 +366,186 @@ fun CustomerInfoSection(
     installments: List<Pair<Double, Long?>>,
     onInstallmentsChange: (List<Pair<Double, Long?>>) -> Unit,
     suggestedContacts: List<com.oqba26.abzarforoush.util.ContactInfo> = emptyList(),
-    onContactSelected: (com.oqba26.abzarforoush.util.ContactInfo) -> Unit = {}
+    onContactSelected: (com.oqba26.abzarforoush.util.ContactInfo) -> Unit = {},
+    selectedPersonId: Long? = null // اضافه شده برای هوشمندسازی
 ) {
+    var isEditMode by remember { mutableStateOf(false) }
+    
+    // اگر شخص از قبل انتخاب شده باشد و در حالت ویرایش نباشیم، نمایش فشرده
+    val showCompact = selectedPersonId != null && !isEditMode
+
     Column(modifier = Modifier.padding(top = 16.dp)) {
         HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-        Text(
-            text = if (isPurchaseMode) "اطلاعات تامین‌کننده" else "اطلاعات مشتری",
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.primary,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(bottom = 12.dp)
-        )
-
-        ExposedDropdownMenuBox(
-            expanded = expanded,
-            onExpandedChange = onExpandedChange,
-            modifier = Modifier.fillMaxWidth()
+        
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            OutlinedTextField(
-                value = manualCustomerName,
-                onValueChange = { input ->
-                    val matchId: Long?
-                    val matchPhone: String?
-                    if (!isPurchaseMode) {
-                        val match = customers.find { it.name == input }
-                        matchId = match?.id
-                        matchPhone = match?.phoneNumber
-                    } else {
-                        val match = suppliers.find { it.name == input }
-                        matchId = match?.id
-                        matchPhone = match?.phoneNumber
-                    }
-                    onNameChange(input, matchId, matchPhone)
-                    onExpandedChange(true)
-                },
-                label = { Text(if (isPurchaseMode) "نام تامین‌کننده" else "نام مشتری (جستجوی هوشمند)") },
-                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-                modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryEditable).fillMaxWidth()
+            Text(
+                text = if (isPurchaseMode) "اطلاعات تامین‌کننده" else "اطلاعات مشتری",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.Bold
             )
+            
+            if (selectedPersonId != null) {
+                TextButton(onClick = { isEditMode = !isEditMode }) {
+                    Text(if (isEditMode) "بستن ویرایش" else "تغییر / ویرایش")
+                }
+            }
+        }
 
-            val filteredItems = if (!isPurchaseMode) {
-                customers.filter { it.name.contains(manualCustomerName, ignoreCase = true) }
-            } else {
-                suppliers.filter { it.name.contains(manualCustomerName, ignoreCase = true) }
+        if (showCompact) {
+            // نمایش فشرده نام و تلفن
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f))
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = "طرف حساب: $manualCustomerName",
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                    if (manualCustomerPhone.isNotBlank()) {
+                        Text(
+                            text = "تلفن: ${manualCustomerPhone.toPersianDigits()}",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+        } else {
+            // فرم کامل جستجو و ویرایش
+            ExposedDropdownMenuBox(
+                expanded = expanded,
+                onExpandedChange = onExpandedChange,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                OutlinedTextField(
+                    value = manualCustomerName,
+                    onValueChange = { input ->
+                        val matchId: Long?
+                        val matchPhone: String?
+                        if (!isPurchaseMode) {
+                            val match = customers.find { it.name == input }
+                            matchId = match?.id
+                            matchPhone = match?.phoneNumber
+                        } else {
+                            val match = suppliers.find { it.name == input }
+                            matchId = match?.id
+                            matchPhone = match?.phoneNumber
+                        }
+                        onNameChange(input, matchId, matchPhone)
+                        onExpandedChange(true)
+                    },
+                    label = { Text(if (isPurchaseMode) "نام تامین‌کننده" else "نام مشتری (جستجوی هوشمند)") },
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                    modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryEditable).fillMaxWidth()
+                )
+
+                val filteredItems = if (!isPurchaseMode) {
+                    customers.filter { it.name.contains(manualCustomerName, ignoreCase = true) }
+                } else {
+                    suppliers.filter { it.name.contains(manualCustomerName, ignoreCase = true) }
+                }
+
+                if (filteredItems.isNotEmpty() && expanded) {
+                    ExposedDropdownMenu(
+                        expanded = true,
+                        onDismissRequest = { onExpandedChange(false) }
+                    ) {
+                        filteredItems.forEach { item ->
+                            val name = if (item is Customer) item.name else (item as com.oqba26.abzarforoush.data.Supplier).name
+                            val phone = if (item is Customer) item.phoneNumber else (item as com.oqba26.abzarforoush.data.Supplier).phoneNumber
+                            val id = if (item is Customer) item.id else (item as com.oqba26.abzarforoush.data.Supplier).id
+
+                            DropdownMenuItem(
+                                text = {
+                                    Column {
+                                        Text(name)
+                                        phone?.let {
+                                            Text(it.toPersianDigits(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
+                                        }
+                                    }
+                                },
+                                onClick = {
+                                    onNameChange(name, id, phone)
+                                    onExpandedChange(false)
+                                }
+                            )
+                        }
+                    }
+                }
             }
 
-            if (filteredItems.isNotEmpty() && expanded) {
-                ExposedDropdownMenu(
-                    expanded = true,
-                    onDismissRequest = { onExpandedChange(false) }
+            if (suggestedContacts.isNotEmpty()) {
+                Text(
+                    text = "یافت شده در مخاطبین گوشی:",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+                androidx.compose.foundation.lazy.LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
                 ) {
-                    filteredItems.forEach { item ->
-                        val name = if (item is Customer) item.name else (item as com.oqba26.abzarforoush.data.Supplier).name
-                        val phone = if (item is Customer) item.phoneNumber else (item as com.oqba26.abzarforoush.data.Supplier).phoneNumber
-                        val id = if (item is Customer) item.id else (item as com.oqba26.abzarforoush.data.Supplier).id
-
-                        DropdownMenuItem(
-                            text = {
+                    items(suggestedContacts.size) { index ->
+                        val contact = suggestedContacts[index]
+                        androidx.compose.material3.SuggestionChip(
+                            onClick = { onContactSelected(contact) },
+                            label = {
                                 Column {
-                                    Text(name)
-                                    phone?.let {
-                                        Text(it.toPersianDigits(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
-                                    }
+                                    Text(contact.name, style = MaterialTheme.typography.labelSmall)
+                                    Text(contact.phoneNumber.toPersianDigits(), style = MaterialTheme.typography.labelSmall, color = androidx.compose.ui.graphics.Color.Gray)
                                 }
-                            },
-                            onClick = {
-                                onNameChange(name, id, phone)
-                                onExpandedChange(false)
                             }
                         )
                     }
                 }
             }
+
+            OutlinedTextField(
+                value = manualCustomerPhone.toPersianDigits(),
+                onValueChange = { onPhoneChange(it.cleanNumber()) },
+                label = { Text("شماره تماس") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+            )
         }
 
-        if (suggestedContacts.isNotEmpty()) {
-            Text(
-                text = "یافت شده در مخاطبین گوشی:",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(top = 4.dp)
-            )
-            androidx.compose.foundation.lazy.LazyRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
-            ) {
-                items(suggestedContacts.size) { index ->
-                    val contact = suggestedContacts[index]
-                    androidx.compose.material3.SuggestionChip(
-                        onClick = { onContactSelected(contact) },
-                        label = {
-                            Column {
-                                Text(contact.name, style = MaterialTheme.typography.labelSmall)
-                                Text(contact.phoneNumber.toPersianDigits(), style = MaterialTheme.typography.labelSmall, color = androidx.compose.ui.graphics.Color.Gray)
-                            }
-                        }
-                    )
-                }
+        // بخش مالی و اقساط همیشه زیر اطلاعات مشتری (چه فشرده چه باز)
+        Spacer(modifier = Modifier.height(16.dp))
+        
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f)),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text("تسویه حساب", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.secondary)
+                
+                OutlinedTextField(
+                    value = amountPaidText,
+                    onValueChange = { onAmountPaidChange(it.cleanNumber()) },
+                    label = { Text("مبلغ پرداختی (تومان)") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    visualTransformation = PersianNumberVisualTransformation(),
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+                )
+
+                OutlinedTextField(
+                    value = totalDiscountText,
+                    onValueChange = { onTotalDiscountChange(it.cleanNumber()) },
+                    label = { Text("تخفیف روی کل فاکتور (تومان)") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    visualTransformation = PersianNumberVisualTransformation(),
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+                )
             }
         }
-
-        OutlinedTextField(
-            value = manualCustomerPhone.toPersianDigits(),
-            onValueChange = { onPhoneChange(it.cleanNumber()) },
-            label = { Text("شماره تماس") },
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
-            modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
-        )
-
-        OutlinedTextField(
-            value = amountPaidText,
-            onValueChange = { onAmountPaidChange(it.cleanNumber()) },
-            label = { Text("مبلغ پرداختی (تومان)") },
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-            visualTransformation = PersianNumberVisualTransformation(),
-            modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
-        )
-
-        OutlinedTextField(
-            value = totalDiscountText,
-            onValueChange = { onTotalDiscountChange(it.cleanNumber()) },
-            label = { Text("تخفیف روی کل فاکتور (تومان)") },
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-            visualTransformation = PersianNumberVisualTransformation(),
-            modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
-        )
 
         if (isDebt) {
             InstallmentSection(remainingDebt, dueDate, onDueDateChange, installments, onInstallmentsChange)
@@ -553,32 +588,50 @@ fun InstallmentSection(
     var showInstallmentDialog by remember { mutableStateOf(false) }
     var showDatePickerForIndex by remember { mutableStateOf<Int?>(null) } // -1 for main dueDate, >=0 for installments
 
-    Column(modifier = Modifier.padding(top = 12.dp)) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text("مدیریت پرداخت و اقساط", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
-            TextButton(onClick = { showInstallmentDialog = true }) {
-                Icon(Icons.Default.Add, null, modifier = Modifier.size(16.dp))
-                Spacer(Modifier.width(4.dp))
-                Text("افزودن قسط")
+    // هوشمندسازی موعد نهایی تسویه بر اساس آخرین قسط
+    LaunchedEffect(installments) {
+        if (installments.isNotEmpty()) {
+            val lastDate = installments.mapNotNull { it.second }.maxOrNull()
+            if (lastDate != null) {
+                onDueDateChange(lastDate)
             }
         }
+    }
 
-        // Main Due Date (if no installments or as the primary one)
-        Card(
+    Column(modifier = Modifier.padding(top = 12.dp)) {
+        Text(
+            text = "مدیریت پرداخت و اقساط",
+            style = MaterialTheme.typography.titleSmall,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(bottom = 8.dp)
+        )
+
+        Button(
+            onClick = { showInstallmentDialog = true },
             modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)),
-            onClick = { showDatePickerForIndex = -1 }
+            shape = MaterialTheme.shapes.medium,
+            colors = ButtonDefaults.buttonColors(
+                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+            )
         ) {
-            Row(
-                modifier = Modifier.padding(12.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+            Icon(Icons.Default.Add, null, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(8.dp))
+            Text("افزودن قسط")
+        }
+
+        // فقط اگر قسطی نباشد، انتخاب دستی موعد نهایی نمایش داده می‌شود
+        if (installments.isEmpty()) {
+            Button(
+                onClick = { showDatePickerForIndex = -1 },
+                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                shape = MaterialTheme.shapes.medium,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.7f),
+                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                )
             ) {
-                Column {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text("موعد نهایی تسویه", style = MaterialTheme.typography.labelSmall)
                     Text(
                         text = dueDate?.toPersianDateString() ?: "انتخاب تاریخ",
@@ -586,7 +639,6 @@ fun InstallmentSection(
                         fontWeight = FontWeight.Bold
                     )
                 }
-                Icon(Icons.Default.Add, null, tint = MaterialTheme.colorScheme.primary)
             }
         }
 
@@ -703,7 +755,16 @@ fun AddInstallmentDialog(
                         },
                         modifier = Modifier.weight(1f)
                     ) { Text("تایید") }
-                    Button(onClick = onDismiss, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)) { Text("انصراف") }
+                    Button(
+                        onClick = onDismiss,
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    ) {
+                        Text("انصراف")
+                    }
                 }
             }
         }

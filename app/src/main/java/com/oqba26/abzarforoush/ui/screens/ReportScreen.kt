@@ -16,6 +16,7 @@ import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
@@ -35,28 +36,17 @@ import kotlin.time.Duration.Companion.milliseconds
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ReportScreen(viewModel: ProductViewModel, onNavigateBack: () -> Unit) {
-    val invoices by viewModel.allInvoices.collectAsState(initial = emptyList())
-    val invoiceItems by viewModel.allInvoiceItems.collectAsState(initial = emptyList())
-    val customers by viewModel.allCustomers.collectAsState(initial = emptyList())
-    val expenses by viewModel.allExpenses.collectAsState(initial = emptyList())
-
-    // بهینه‌سازی محاسبات سنگین با استفاده از derivedStateOf
-    val totalSales by remember(invoices) { derivedStateOf { invoices.sumOf { it.invoice.totalAmount } } }
-    val totalReceived by remember(invoices) { derivedStateOf { invoices.sumOf { it.invoice.amountPaid } } }
-    val totalDebt by remember(customers) { derivedStateOf { customers.sumOf { it.totalDebt } } }
-    val totalExpenses by remember(expenses) { derivedStateOf { expenses.sumOf { it.amount } } }
+    val invoices by viewModel.allInvoices.collectAsStateWithLifecycle(initialValue = emptyList())
+    val financialSummary by viewModel.financialSummary.collectAsStateWithLifecycle()
+    val topProducts by viewModel.topProducts.collectAsStateWithLifecycle()
+    val aiInsights by viewModel.aiInsights.collectAsStateWithLifecycle()
     
-    val aiInsights by viewModel.aiInsights.collectAsState()
-    
-    val grossProfit by remember(invoices, invoiceItems) { 
-        derivedStateOf {
-            invoiceItems.sumOf { 
-                (it.priceAtSale - it.purchasePriceAtSale) * it.quantity - it.discount 
-            } - invoices.sumOf { it.invoice.totalDiscount }
-        }
-    }
-    
-    val netProfit by remember(grossProfit, totalExpenses) { derivedStateOf { grossProfit - totalExpenses } }
+    val totalSales = financialSummary?.totalSales ?: 0.0
+    val totalReceived = financialSummary?.totalReceived ?: 0.0
+    val totalDebt = financialSummary?.totalDebt ?: 0.0
+    val totalExpenses = financialSummary?.totalExpenses ?: 0.0
+    val grossProfit = financialSummary?.grossProfit ?: 0.0
+    val netProfit = financialSummary?.netProfit ?: 0.0
     
     var isAnalyzing by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
@@ -158,13 +148,6 @@ fun ReportScreen(viewModel: ProductViewModel, onNavigateBack: () -> Unit) {
             item {
                 Text("پر‌فروش‌ترین کالاها", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             }
-
-            val topProducts = invoiceItems
-                .groupBy { it.productName }
-                .mapValues { entry -> entry.value.sumOf { it.quantity } }
-                .toList()
-                .sortedByDescending { it.second }
-                .take(5)
 
             items(topProducts) { (name, qty) ->
                 Row(

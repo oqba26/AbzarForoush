@@ -173,20 +173,21 @@ fun ProductScreen(
                                 modifier = Modifier.weight(1f),
                                 shape = MaterialTheme.shapes.small,
                                 colors = androidx.compose.material3.ButtonDefaults.buttonColors(
-                                    containerColor = MaterialTheme.colorScheme.primary
+                                    containerColor = MaterialTheme.colorScheme.error
                                 )
                             ) {
-                                Text("تایید", color = MaterialTheme.colorScheme.onPrimary)
+                                Text("تایید", color = MaterialTheme.colorScheme.onError)
                             }
                             Button(
                                 onClick = { productToDelete = null },
                                 modifier = Modifier.weight(1f),
                                 colors = androidx.compose.material3.ButtonDefaults.buttonColors(
-                                    containerColor = MaterialTheme.colorScheme.error
+                                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant
                                 ),
                                 shape = MaterialTheme.shapes.small
                             ) {
-                                Text("انصراف", color = MaterialTheme.colorScheme.onError)
+                                Text("انصراف")
                             }
                         }
                     }
